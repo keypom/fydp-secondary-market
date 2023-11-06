@@ -33,9 +33,6 @@ debug = false
 panic = "abort"
 overflow-checks = true
 
-[workspace]
-members = []
-
 [[bin]]
 name = "tests"
 path = "tests/main.rs"

@@ -33,6 +33,7 @@ impl Marketplace {
 
         require!(self.approved_drops.contains(&desired_drop.to_string()), "No drop found");
 
+        near_sdk::log!("Trying to purchase key on drop ID {} at price of {}", desired_drop, price);
         let mut keys_vec = Vec::new();
         keys_vec.push(new_key_info);
         // Get key's drop ID and then event, in order to modify all needed data

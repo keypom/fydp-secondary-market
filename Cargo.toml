@@ -1,12 +1,13 @@
-
-[workspace.package]
-authors = ["Min"]
+[package]
+name = "access-key-marketplace"
+version = "1.0.0"
+authors = ["Min Qian Lu"]
 edition = "2021"
-publish = false
 
-[workspace.dependencies]
-access-key-marketplace = {path = "src"}
-market-test = { path = "tests", default-features = false}
+# [lib]
+# crate-type = ["cdylib"]
+
+[dependencies]
 near-sdk = "4.0.0"
 uint = { version = "0.9.3", default-features = false }
 serde = { version = "1.0", features = ["derive"] }
@@ -17,12 +18,20 @@ near-units = "0.2.0"
 anyhow = "1.0"
 
 
-[workspace]
-resolver = "2"
-members = [
-    "tests",
-    "src",
-]
+[dev-dependencies]
+insta = { version = "1.31.0", features = ["json", "redactions"] }
+regex = "1"
 
 
+# [profile.release]
+# codegen-units = 1
+# opt-level = "z"
+# lto = true
+# debug = false
+# panic = "abort"
+# overflow-checks = true
+
+# [[bin]]
+# name = "tests"
+# path = "tests/basic-test.rs"
 

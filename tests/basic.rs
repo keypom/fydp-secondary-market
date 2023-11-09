@@ -427,42 +427,60 @@ async fn owner_resale_test() -> anyhow::Result<()> {
     outcome = ali.call(marketplace.id(), "list_ticket").args_json(json!({
         "key": key_to_be_sold,
         "price": near_units::parse_near!("1.5"),
-        "approval_id": 1
+        "approval_id": 0
     }))
     .deposit(deposit)
     .gas(Gas::from_tgas(150))
     .transact()
     .await?;
     assert!(outcome.is_success());
-    println!("OUTCOME: {:?}", outcome);
-    println!("LOGS: {:?}", outcome.logs());
-
-    assert!(1==2);
-    
 
 
-    //  // TODO: Test what happens if resale new key is the same, what state gets rolled back?
-    //  let new_pub_key: PublicKey = "ed25519:6E8sCci9badyRkXb3JoRpBj5p8C6Tw41ELDZoiihKEtM".parse().unwrap();
-    //  let sale_outcome = bob.call(marketplace.id(), "buy_resale").args_json(json!({
-    //     "public_key": key_to_be_sold.public_key,
-    //     "new_owner_id": Some(bob.id()),
-    //     "new_public_key": new_pub_key,
-    //  }))
-    //  .deposit(deposit.saturating_mul(2))
-    //  .gas(Gas::from_tgas(150))
-    //  .transact()
-    //  .await?;
-    // println!("outcome {:?}", sale_outcome);
-    //     println!("LOGS: {:?}", sale_outcome.logs());
-    // assert!(sale_outcome.is_success());
+    let key_info: serde_json::Value = worker.view(keypom.id(), "get_key_information").args_json(json!({
+        "key": key_to_be_sold.public_key
+    })).await?.json()?;
+    println!("key info: {}", key_info);
 
-    // let result: serde_json::Value = worker.view(keypom.id(), "get_key_information")
-    // .args_json(json!({
-    //     "public_key": new_pub_key
-    // }))
-    // .await?.json()?;
-    // assert!(result["owner_id"] == bob.id().to_string());
-    
+    let token_id = key_info["token_id"].as_str().unwrap().to_string();
+
+    // Add marketplace to allowlist
+    outcome = ali.call(keypom.id(), "nft_approve").args_json(json!({
+        "account_id": marketplace.id(),
+        "token_id": token_id,
+    }))
+    .deposit(deposit)
+    .gas(Gas::from_tgas(150))
+    .transact()
+    .await?;
+println!("nft_approve outcome {:?}", outcome);
+println!("nft_approve LOGS: {:?}", outcome.logs());
+    assert!(outcome.is_success());
+
+     // TODO: Test what happens if resale new key is the same, what state gets rolled back?
+     let new_pub_key: PublicKey = "ed25519:6E8sCci9badyRkXb3JoRpBj5p8C6Tw41ELDZoiihKEtM".parse().unwrap();
+     let sale_outcome = bob.call(marketplace.id(), "buy_resale").args_json(json!({
+        "public_key": key_to_be_sold.public_key,
+        "new_owner_id": Some(bob.id()),
+        "new_public_key": new_pub_key,
+     }))
+     .deposit(deposit.saturating_mul(2))
+     .gas(Gas::from_tgas(150))
+     .transact()
+     .await?;
+    println!("buy_resale outcome {:?}", sale_outcome);
+        println!("buy_resale LOGS: {:?}", sale_outcome.logs());
+    assert!(sale_outcome.is_success());
+
+
+    // TODO: Figure out why nft_transfer is not working as expected
+    let result: serde_json::Value = worker.view(keypom.id(), "get_key_information")
+    .args_json(json!({
+        "key": new_pub_key
+    }))
+    .await?.json()?;
+    println!("result: {}", result);
+    println!("bob: {}", bob.id().to_string());
+    assert!(result["owner_id"] == bob.id().to_string());
  
      Ok(())
     

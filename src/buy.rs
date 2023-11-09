@@ -113,12 +113,12 @@ impl Marketplace {
         require!(new_public_key != public_key, "New and old key cannot be the same");
 
         let approval_id = self.approval_id_by_pk.get(&public_key).expect("No approval ID found for PK");
-        
-        near_sdk::log!("getting key information with {:?}", public_key.clone());
 
+        let pk_string = String::from(&public_key);
+        near_sdk::log!("getting key information with {:?}", pk_string);
         // Get key's drop ID and then event, in order to modify all needed data
         ext_keypom::ext(AccountId::try_from(self.keypom_contract.to_string()).unwrap())
-                       .get_key_information(String::try_from(&public_key).unwrap())
+                       .get_key_information(pk_string)
                        .then(
                             Self::ext(env::current_account_id())
                             .buy_resale_middle_callback(public_key, initial_storage, env::predecessor_account_id(), new_owner_id, new_public_key, approval_id)
@@ -138,13 +138,11 @@ impl Marketplace {
     ){
          // Parse Response and Check if Fractal is in owned tokens
          if let PromiseResult::Successful(val) = env::promise_result(0) {
-            // expected result: Result<ExtKeyInfo, String>
             
-            if let Ok(key_info) = near_sdk::serde_json::from_slice::<Result<ExtKeyInfo, String>>(&val) {
-                let key_information_ref = key_info.as_ref();
-                let token_id = &key_information_ref.unwrap().token_id;
-                let drop_id = &key_information_ref.unwrap().drop_id;
-                let old_owner = &key_information_ref.unwrap().owner_id;
+            if let Ok(key_info) = near_sdk::serde_json::from_slice::<ExtKeyInfo>(&val) {
+                let token_id = &key_info.token_id;
+                let drop_id = &key_info.drop_id;
+                let old_owner = &key_info.owner_id;
 
                 ext_keypom::ext(AccountId::try_from(self.keypom_contract.to_string()).unwrap())
                        .nft_transfer(Some(token_id.clone()), new_owner_id, Some(approval_id), new_public_key)
@@ -174,6 +172,7 @@ impl Marketplace {
 
              // Parse Response and Check if Fractal is in owned tokens
         if let PromiseResult::Successful(val) = env::promise_result(0) {
+            near_sdk::log!("made it into resale callback");
             self.resale_per_pk.remove(&public_key);
             self.approval_id_by_pk.remove(&public_key);
             let listed_keys: Vec<PublicKey> = self.listed_keys_per_drop.get(&drop_id).as_ref().unwrap().as_ref().unwrap().to_vec();

@@ -87,7 +87,7 @@ impl Marketplace {
                         );
     }
 
-    #[private]
+    #[private] #[payable]
     pub fn internal_list_ticket(
         &mut self,
         key: ExtKeyData,

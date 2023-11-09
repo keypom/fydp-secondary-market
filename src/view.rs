@@ -26,7 +26,7 @@ impl Marketplace{
         .collect::<Vec<DropId>>();
 
         sorted_drop_ids.sort_by_key(|drop_id| {
-            self.event_by_id.get(&event_id).as_ref().unwrap().price_by_drop_id.get(drop_id).as_ref().map(|opt_balance| opt_balance.unwrap_or_default())
+            self.event_by_id.get(&event_id).as_ref().unwrap().price_by_drop_id.get(drop_id).as_ref().map(|opt_balance| opt_balance.unwrap_or(U128::from(0)))
         });
 
         // sort high to low if specified, otherwise, keep it low to high
@@ -44,7 +44,7 @@ impl Marketplace{
         self.event_by_id.get(&event_id).expect("No Event Found")
     }
 
-    pub fn get_resale_price_per_pk(&self, public_key: PublicKey) -> u128 {
+    pub fn get_resale_price_per_pk(&self, public_key: PublicKey) -> U128 {
         self.resale_per_pk.get(&public_key).expect("No resale for Public Key")
     }
 

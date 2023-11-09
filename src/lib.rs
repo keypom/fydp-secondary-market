@@ -82,11 +82,11 @@ pub struct Marketplace {
     // Collection of keys that have been listed per drop -> will use and implement IF ccc's are too much
     //pub drop_per_key: LookupMap<PublicKey, DropId>,
     // Price ceiling for listed keys not part of drop, generated automatically on first resale
-    pub max_price_per_dropless_key: LookupMap<PublicKey, Balance>,
+    pub max_price_per_dropless_key: LookupMap<PublicKey, U128>,
     // Approval ID by Public Key, used when user lists key for sale
     pub approval_id_by_pk: LookupMap<PublicKey, u64>,
     // Resale price per pk
-    pub resale_per_pk: LookupMap<PublicKey, Balance>
+    pub resale_per_pk: LookupMap<PublicKey, U128>
 }
 
 impl Default for Marketplace{

@@ -35,7 +35,7 @@ impl Marketplace {
         let final_storage = env::storage_usage();
         if final_storage > initial_storage {
             let storage_used = final_storage - initial_storage;
-            self.charge_deposit((storage_used as u128 * env::storage_byte_cost()) as u128);
+            self.charge_deposit(near_sdk::json_types::U128((storage_used as u128 * env::storage_byte_cost()) as u128));
         }
         else if final_storage < initial_storage {
             let storage_freed = initial_storage - final_storage;
@@ -47,6 +47,24 @@ impl Marketplace {
 
     }
 
+    #[payable]
+    // IGNORING STORAGE
+    pub fn modify_sale_prices(
+        &mut self,
+        event_id: EventID,
+        new_price_by_drop_id: Option<HashMap<DropId, Option<U128>>>,
+    ){
+        self.assert_no_global_freeze();
+
+        require!(self.event_by_id.get(&event_id).is_some(), "No Event Found");
+        require!(self.event_by_id.get(&event_id).unwrap().host == Some(env::predecessor_account_id()), "Must be event host to modify event details!");
+
+        let mut event = self.event_by_id.get(&event_id).expect("No Event Found");
+        event.price_by_drop_id = new_price_by_drop_id.unwrap();
+        self.event_by_id.insert(&event_id, &event);
+
+    }
+    
     /// Modify a Drop's Resale Conditions
     #[payable]
     pub fn modify_drop_resale_markup(

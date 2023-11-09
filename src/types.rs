@@ -52,8 +52,7 @@ pub struct EventDetails {
     // drop - tier link create here, either implicitely through vec or unorderedmap 
     pub drop_ids: Vec<DropId>,
     // Tiered Pricing?
-    pub price_by_drop_id: HashMap<DropId, Option<Balance>>,
-    
+    pub price_by_drop_id: HashMap<DropId, Option<U128>>,
     // Every event should be capable of tiered ticketing, i.e multiple drops per event
 }
 
@@ -64,7 +63,7 @@ pub struct AddedDropDetails {
     // Maximum number of tickets
     pub max_tickets: Option<u64>,
     // Tiered Pricing?
-    pub price_by_drop_id: Option<Balance>,
+    pub price_by_drop_id: Option<U128>,
     
     // Every event should be capable of tiered ticketing, i.e multiple drops per event
 }

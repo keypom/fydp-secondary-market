@@ -28,12 +28,12 @@ impl Marketplace {
         require!(tier < tiered_drops.len(), "Desired Tier not in valid");
         
         let desired_drop = tiered_drops.get(tier).unwrap();
-        let price = self.event_by_id.get(&event_id).as_ref().unwrap().price_by_drop_id.get(&desired_drop.to_string()).unwrap().unwrap_or(0);
-        require!(received_deposit >= price, "Not enough attached deposit to fund purchase at specified ticket tier!");
+        let price = self.event_by_id.get(&event_id).as_ref().unwrap().price_by_drop_id.get(&desired_drop.to_string()).unwrap().unwrap_or(near_sdk::json_types::U128(0));
+        require!(received_deposit >= u128::from(price), "Not enough attached deposit to fund purchase at specified ticket tier!");
 
         require!(self.approved_drops.contains(&desired_drop.to_string()), "No drop found");
 
-        near_sdk::log!("Trying to purchase key on drop ID {} at price of {}", desired_drop, price);
+        near_sdk::log!("Trying to purchase key on drop ID {} at price of {}", desired_drop, u128::from(price));
         near_sdk::log!("Received paymnet: {}", received_deposit);
         let mut keys_vec = Vec::new();
         let public_key = new_key_info.public_key.clone();
@@ -109,7 +109,7 @@ impl Marketplace {
         // Verify Sale - price wise, was attached deposit enough?
         let received_deposit = env::attached_deposit();
         let price = self.resale_per_pk.get(&public_key).expect("No resale for found this private key");
-        require!(received_deposit >= price, "Not enough attached deposit to fund purchase at specified ticket tier!");
+        require!(received_deposit >= u128::from(price), "Not enough attached deposit to fund purchase at specified ticket tier!");
         require!(new_public_key != public_key, "New and old key cannot be the same");
 
         let approval_id = self.approval_id_by_pk.get(&public_key).expect("No approval ID found for PK");

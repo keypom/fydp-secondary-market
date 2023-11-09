@@ -12,7 +12,7 @@ impl Marketplace{
         max_markup: u64,
         max_tickets: Option<HashMap<DropId, Option<u64>>>,
         drop_ids: Option<Vec<DropId>>,
-        price_by_drop_id: Option<HashMap<DropId, Option<Balance>>>,
+        price_by_drop_id: Option<HashMap<DropId, Option<U128>>>,
     ) -> EventDetails{
 
         require!(self.event_by_id.get(&event_id).is_none(), "Event ID already exists!");

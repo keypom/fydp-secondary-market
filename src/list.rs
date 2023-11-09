@@ -18,7 +18,7 @@ impl Marketplace {
         max_markup: u64,
         max_tickets: Option<HashMap<DropId, Option<u64>>>,
         drop_ids: Option<Vec<DropId>>,
-        price_by_drop_id: Option<HashMap<DropId, Option<Balance>>>,
+        price_by_drop_id: Option<HashMap<DropId, Option<U128>>>,
         // Implement this later, not high priority right now and could be complicated
         //existing_keys: Option<HashMap<DropId, Vec<PublicKey>>>
     ){
@@ -56,7 +56,7 @@ impl Marketplace {
         let net_storage = env::storage_usage() - initial_storage;
         let storage_cost = net_storage as Balance * env::storage_byte_cost();
 
-        self.charge_deposit(storage_cost);
+        self.charge_deposit(near_sdk::json_types::U128(storage_cost));
     }
     
     // List a ticket, apply constraints from drop or generate own if not associated with known drop
@@ -64,7 +64,7 @@ impl Marketplace {
     pub fn list_ticket(
         &mut self,
         key: ExtKeyData,
-        price: Balance,
+        price: U128,
         approval_id: u64,
     ){
         self.assert_no_global_freeze();
@@ -91,7 +91,7 @@ impl Marketplace {
     pub fn internal_list_ticket(
         &mut self,
         key: ExtKeyData,
-        price: Balance,
+        price: U128,
         approval_id: u64,
         initial_storage: u64
     ){
@@ -111,11 +111,11 @@ impl Marketplace {
                     // Clamp price using max_markup
                     let mut final_price = price;
                     if let Some(base_price) = event.price_by_drop_id.get(&drop_id){
-                        if base_price.is_some() && price.gt(&(base_price.unwrap() * event.max_markup as u128)){
-                            let max_price = base_price.unwrap() * event.max_markup as u128;
+                        if base_price.is_some() && u128::from(price).gt(&(u128::from(base_price.unwrap()) * event.max_markup as u128)){
+                            let max_price = u128::from(base_price.unwrap()) * event.max_markup as u128;
                             final_price = base_price.unwrap();
-                            if price.gt(&max_price){
-                                final_price = max_price;
+                            if price.gt(&U128::from(max_price)){
+                                final_price = U128::from(max_price);
                             }
                         }
                     }
@@ -162,8 +162,8 @@ impl Marketplace {
                  // Data Structures to update: max_price_per_dropless_key, approval_id_by_pk, resale_per_pk, listed_keys_per_drop, approved_drops
                 else{
                     // Add to dropless key data structures - max_price, approval by pk, resale by pk, approved drops, listed keys per drop
-                    let max_price = price * 2;
-                    self.max_price_per_dropless_key.insert(&key.public_key, &max_price);
+                    let max_price = u128::from(price) * 2;
+                    self.max_price_per_dropless_key.insert(&key.public_key, &U128::from(max_price));
                     self.approval_id_by_pk.insert(&key.public_key, &approval_id);
                     self.resale_per_pk.insert(&key.public_key, &price);
                     if !self.approved_drops.contains(&drop_id){
@@ -201,7 +201,7 @@ impl Marketplace {
         near_sdk::log!("storage cost {}", storage_cost);
         near_sdk::log!("attached deposit: {}", env::attached_deposit());
 
-        self.charge_deposit(storage_cost);
+        self.charge_deposit(near_sdk::json_types::U128::from(storage_cost));
     }
 
 
@@ -251,6 +251,6 @@ impl Marketplace {
         let net_storage = env::storage_usage() - initial_storage;
         let storage_cost = net_storage as Balance * env::storage_byte_cost();
 
-        self.charge_deposit(storage_cost);
+        self.charge_deposit(near_sdk::json_types::U128(storage_cost));
     }
 }

@@ -34,14 +34,16 @@ impl Marketplace {
         require!(self.approved_drops.contains(&desired_drop.to_string()), "No drop found");
 
         near_sdk::log!("Trying to purchase key on drop ID {} at price of {}", desired_drop, price);
+        near_sdk::log!("Received paymnet: {}", received_deposit);
         let mut keys_vec = Vec::new();
+        let public_key = new_key_info.public_key.clone();
         keys_vec.push(new_key_info);
         // Get key's drop ID and then event, in order to modify all needed data
         ext_keypom::ext(AccountId::try_from(self.keypom_contract.to_string()).unwrap())
                        .add_keys(desired_drop.to_string(), keys_vec, None)
                        .then(
                             Self::ext(env::current_account_id())
-                            .buy_initial_sale_callback(initial_storage, env::predecessor_account_id())
+                            .buy_initial_sale_callback(initial_storage, env::predecessor_account_id(), public_key)
                         );
         
     }
@@ -50,13 +52,30 @@ impl Marketplace {
     pub fn buy_initial_sale_callback(
         &mut self,
         initial_storage: u64, 
-        predecessor: AccountId) -> bool {
+        predecessor: AccountId,
+        public_key: PublicKey) -> bool {
 
              // Parse Response and Check if Fractal is in owned tokens
         if let PromiseResult::Successful(val) = env::promise_result(0) {
             // expected result: Result<ExtKeyInfo, String>
             
             if let Ok(result) = near_sdk::serde_json::from_slice::<bool>(&val) {
+                // Add key to owned keys
+                if self.owned_keys_per_account.contains_key(&predecessor){
+                    if self.owned_keys_per_account.get(&predecessor).is_none(){
+                        // No existing vector
+                        let mut keys_vec: Vec<PublicKey> = Vec::new();
+                        keys_vec.push(public_key.clone());
+                        self.owned_keys_per_account.insert(&predecessor, &Some(keys_vec));
+                    }else{
+                        self.owned_keys_per_account.get(&predecessor).unwrap().unwrap().push(public_key.clone());
+                    }
+                }else{
+                   // Create new drop <-> vector pairing
+                   let mut keys_vec: Vec<PublicKey> = Vec::new();
+                   keys_vec.push(public_key.clone());
+                   self.owned_keys_per_account.insert(&predecessor, &Some(keys_vec));
+                }
                 
                 let final_storage = env::storage_usage();
                 let storage_freed = final_storage - initial_storage;
@@ -95,6 +114,8 @@ impl Marketplace {
 
         let approval_id = self.approval_id_by_pk.get(&public_key).expect("No approval ID found for PK");
         
+        near_sdk::log!("getting key information with {:?}", public_key.clone());
+
         // Get key's drop ID and then event, in order to modify all needed data
         ext_keypom::ext(AccountId::try_from(self.keypom_contract.to_string()).unwrap())
                        .get_key_information(String::try_from(&public_key).unwrap())
@@ -123,12 +144,13 @@ impl Marketplace {
                 let key_information_ref = key_info.as_ref();
                 let token_id = &key_information_ref.unwrap().token_id;
                 let drop_id = &key_information_ref.unwrap().drop_id;
+                let old_owner = &key_information_ref.unwrap().owner_id;
 
                 ext_keypom::ext(AccountId::try_from(self.keypom_contract.to_string()).unwrap())
                        .nft_transfer(Some(token_id.clone()), new_owner_id, Some(approval_id), new_public_key)
                        .then(
                             Self::ext(env::current_account_id())
-                            .buy_resale_callback(initial_storage, predecessor, public_key, drop_id.to_string())
+                            .buy_resale_callback(initial_storage, predecessor, public_key, drop_id.to_string(), old_owner.clone())
                         );
 
             } else {
@@ -146,7 +168,8 @@ impl Marketplace {
         initial_storage: u64, 
         predecessor: AccountId,
         public_key: PublicKey,
-        drop_id: DropId
+        drop_id: DropId,
+        old_owner: AccountId
     ) {
 
              // Parse Response and Check if Fractal is in owned tokens
@@ -156,6 +179,13 @@ impl Marketplace {
             let listed_keys: Vec<PublicKey> = self.listed_keys_per_drop.get(&drop_id).as_ref().unwrap().as_ref().unwrap().to_vec();
             let new_listed_keys: Vec<PublicKey> = listed_keys.iter().filter(|&x| x != &public_key).cloned().collect();
             self.listed_keys_per_drop.insert(&drop_id, &Some(new_listed_keys));
+
+            // self.owned_keys_per_owner swap
+            if old_owner != AccountId::try_from(self.keypom_contract.to_string()).unwrap() {
+                let new_key_list: Vec<PublicKey> = self.owned_keys_per_account.get(&old_owner).unwrap().unwrap().iter().filter(|&x| x != &public_key).cloned().collect();
+                self.owned_keys_per_account.insert(&old_owner, &Some(new_key_list));
+            }
+            
             
             self.max_price_per_dropless_key.remove(&public_key);
             if self.event_by_drop_id.contains_key(&drop_id){

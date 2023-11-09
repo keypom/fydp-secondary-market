@@ -40,7 +40,7 @@ impl Marketplace {
         // Insert by event ID stuff first
         self.event_by_id.insert(&final_event_details.event_id, &final_event_details);
         self.resales_for_event.insert(&final_event_details.event_id, &None);
-
+ 
         // By Drop ID data structures
         let drop_ids = final_event_details.drop_ids;
         for drop_id in drop_ids {
@@ -75,11 +75,14 @@ impl Marketplace {
         require!(env::predecessor_account_id() == key.key_owner.clone().unwrap_or(env::current_account_id()) 
         || env::signer_account_pk() == key.public_key, "Must own or use the access key being listed!");
         
+        near_sdk::log!("attached deposit: {}", env::attached_deposit());
+
         // Get key's drop ID and then event, in order to modify all needed data
         ext_keypom::ext(AccountId::try_from(self.keypom_contract.to_string()).unwrap())
                        .get_key_information(String::try_from(&key.public_key).unwrap())
                        .then(
                             Self::ext(env::current_account_id())
+                            .with_attached_deposit(env::attached_deposit())
                             .internal_list_ticket(key, price, approval_id, initial_storage)
                         );
     }
@@ -97,8 +100,8 @@ impl Marketplace {
          if let PromiseResult::Successful(val) = env::promise_result(0) {
             // expected result: Result<ExtKeyInfo, String>
             
-            if let Ok(key_info) = near_sdk::serde_json::from_slice::<Result<ExtKeyInfo, String>>(&val) {
-                let drop_id = key_info.unwrap().drop_id;
+            if let Ok(key_info) = near_sdk::serde_json::from_slice::<ExtKeyInfo>(&val) {
+                let drop_id = key_info.drop_id;
                 
                 // Case 1: Key associated with event
                 // Data structures to update: event_by_id, resales_for_event, listed_keys_per_drop, approval_id_by_pk, resale_per_pk
@@ -123,7 +126,7 @@ impl Marketplace {
                     
                     // ensure listed keys per drop contains this key
                     if self.listed_keys_per_drop.contains_key(&drop_id){
-                        if self.listed_keys_per_drop.get(&drop_id).is_none(){
+                        if self.listed_keys_per_drop.get(&drop_id).as_ref().unwrap().is_none(){
                             // No existing vector
                             let mut keys_vec: Vec<PublicKey> = Vec::new();
                             keys_vec.push(key.public_key.clone());
@@ -140,7 +143,7 @@ impl Marketplace {
 
                     // ensure resales for event contains this key
                     if self.resales_for_event.contains_key(&event_id){
-                        if self.resales_for_event.get(&event_id).is_none(){
+                        if self.resales_for_event.get(&event_id).as_ref().unwrap().is_none(){
                             // No existing vector
                             let mut keys_vec: Vec<PublicKey> = Vec::new();
                             keys_vec.push(key.public_key.clone());
@@ -168,7 +171,7 @@ impl Marketplace {
                     }
                     
                     if self.listed_keys_per_drop.contains_key(&drop_id){
-                        if self.listed_keys_per_drop.get(&drop_id).is_none(){
+                        if self.listed_keys_per_drop.get(&drop_id).as_ref().unwrap().is_none(){
                             // No existing vector
                             let mut keys_vec: Vec<PublicKey> = Vec::new();
                             keys_vec.push(key.public_key.clone());
@@ -195,6 +198,8 @@ impl Marketplace {
         // Calculate used storage and charge the user
         let net_storage = env::storage_usage() - initial_storage;
         let storage_cost = net_storage as Balance * env::storage_byte_cost();
+        near_sdk::log!("storage cost {}", storage_cost);
+        near_sdk::log!("attached deposit: {}", env::attached_deposit());
 
         self.charge_deposit(storage_cost);
     }

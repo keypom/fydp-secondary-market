@@ -9,6 +9,44 @@ pub const SPUTNIK_PROPOSAL_DEPOSIT: Balance = 100000000000000000000000;
 #[near_bindgen]
 impl Marketplace {
 
+    #[payable]
+    pub fn modify_event_details(
+        &mut self,
+        event_id: EventID,
+        new_name: Option<String>,
+        new_host: Option<AccountId>,
+        new_description: Option<String>,
+
+    ){
+        self.assert_no_global_freeze();
+        let initial_storage = env::storage_usage();
+        near_sdk::log!("initial bytes {}", initial_storage);
+
+        require!(self.event_by_id.get(&event_id).is_some(), "No Event Found");
+        require!(self.event_by_id.get(&event_id).unwrap().host == Some(env::predecessor_account_id()), "Must be event host to modify event details!");
+        let mut event_details = self.event_by_id.get(&event_id).expect("No Event Found");
+        event_details.name = new_name;
+        if new_host.is_some(){
+            event_details.host = new_host;
+        }
+        event_details.description = new_description;
+        self.event_by_id.insert(&event_id, &event_details);
+
+        let final_storage = env::storage_usage();
+        if final_storage > initial_storage {
+            let storage_used = final_storage - initial_storage;
+            self.charge_deposit((storage_used as u128 * env::storage_byte_cost()) as u128);
+        }
+        else if final_storage < initial_storage {
+            let storage_freed = initial_storage - final_storage;
+            Promise::new(env::predecessor_account_id()).transfer(storage_freed as u128 * env::storage_byte_cost() as u128).as_return();   
+        }
+        else{
+            Promise::new(env::predecessor_account_id()).transfer(0).as_return();   
+        }
+
+    }
+
     /// Modify a Drop's Resale Conditions
     #[payable]
     pub fn modify_drop_resale_markup(

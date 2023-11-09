@@ -11,6 +11,8 @@ pub enum StorageKeys {
     
     EventByDropId,
     KeysByDropId,
+
+    KeysForOwner,
     
     MaxPricePerKey,
     ApprovalIDByPk,

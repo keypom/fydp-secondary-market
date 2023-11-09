@@ -67,6 +67,9 @@ pub struct Marketplace {
 
     // TODO: STORE KEY PASSWORD SOMEWHERE? HOW DOES FRONTEND KNOW WHAT PASSWORD TO PASS IN?
 
+    // **************** By Account ****************
+    pub owned_keys_per_account: LookupMap<AccountId, Option<Vec<PublicKey>>>,
+
     // **************** By Drop ****************
     // Drops that the marketplace can add keys to, by DropID
     pub approved_drops: HashSet<DropId>,
@@ -97,6 +100,8 @@ impl Default for Marketplace{
             // **************** By Event ID ****************
             event_by_id: UnorderedMap::new(StorageKeys::EventInfoPerDrop),
             resales_for_event: LookupMap::new(StorageKeys::ResalePerEvent),
+            // **************** By Account ****************
+            owned_keys_per_account: LookupMap::new(StorageKeys::KeysForOwner),
             // **************** By Drop ****************
             approved_drops: HashSet::new(),
             event_by_drop_id: LookupMap::new(StorageKeys::EventByDropId),
@@ -129,6 +134,8 @@ impl Marketplace {
              // **************** By Event ID ****************
              event_by_id: UnorderedMap::new(StorageKeys::EventInfoPerDrop),
              resales_for_event: LookupMap::new(StorageKeys::ResalePerEvent),
+             // **************** By Account ****************
+            owned_keys_per_account: LookupMap::new(StorageKeys::KeysForOwner),
              // **************** By Drop ****************
              approved_drops: HashSet::new(),
              event_by_drop_id: LookupMap::new(StorageKeys::EventByDropId),

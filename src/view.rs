@@ -1,7 +1,26 @@
 use crate::*;
 
 #[near_bindgen]
+#[derive(BorshDeserialize, BorshSerialize, Serialize, Deserialize, Clone)]
+pub struct ResaleInformation {
+    pub price: U128,
+    pub public_key: PublicKey,
+    // Public Facing event name
+    pub event_name: Option<String>,
+    // Event hosts, not necessarily the same as all the drop funders
+    pub host: Option<AccountId>,
+    // Event ID, in case on needing to abstract on contract to multiple drops per event
+    // For now, event ID is drop ID
+    pub event_id: Option<String>,
+    pub description: Option<String>,
+    // Date
+    pub date: Option<String>,
+   
+}
+
+#[near_bindgen]
 impl Marketplace{
+    
     // View calls -> all events/drops, filter by funder, get event info, get owner, keypom constract, resale price per pk, resales per event, etc.
     pub fn get_events_per_funder(&self, funder: AccountId, limit: Option<u64>, from_index: Option<u64>) -> Vec<EventDetails>{
         // TODO: Add limit and from_index
@@ -46,6 +65,57 @@ impl Marketplace{
 
     pub fn get_resale_price_per_pk(&self, public_key: PublicKey) -> U128 {
         self.resale_per_pk.get(&public_key).expect("No resale for Public Key")
+    }
+
+    pub fn get_resales_for_event(&self, event_id: EventID) -> Option<Vec<PublicKey>> {
+        self.resales_for_event.get(&event_id).unwrap()
+    }
+
+    pub fn get_all_resales(&self) -> Vec<ResaleInformation> {
+        let all_event_id = self.get_event_ids();
+        let all_events_copy = all_event_id.clone();
+        let mut event_name;
+        let mut host; 
+        let mut description; 
+        let mut date;
+        let mut all_resales: Vec<ResaleInformation> = Vec::new();
+        let mut index = 0;
+        near_sdk::log!("all event id {:?}", all_event_id);
+        for event_id in all_event_id {
+            // Same for all keys in event
+            event_name = self.event_by_id.get(&event_id).unwrap().name.clone();
+            host = self.event_by_id.get(&event_id).unwrap().host.clone();
+            description = self.event_by_id.get(&event_id).unwrap().description.clone();
+            date = self.event_by_id.get(&event_id).unwrap().date.clone();
+
+            let resales = self.get_resales_for_event(event_id);
+            for resale in resales.unwrap_or(Vec::new()) {
+                let resale_info = ResaleInformation{
+                    price: self.get_resale_price_per_pk(resale.clone()),
+                    public_key: resale,
+                    event_id: Some(all_events_copy.get(index).unwrap().clone()),
+                    event_name: event_name.clone(),
+                    host: host.clone(),
+                    description: description.clone(),
+                    date: date.clone()
+                };
+                all_resales.push(resale_info);
+            }
+            index += 1;
+        }
+        all_resales
+    }
+
+    pub fn get_drops_on_contract(&self) -> Vec<DropId> {
+        self.approved_drops.iter().cloned().collect()
+    }
+
+    pub fn get_event_ids(&self) -> Vec<EventID> {
+        self.event_by_id.iter().map(|x| x.1.event_id).collect()
+    }
+
+    pub fn get_keys_for_owner(&self, owner_id: AccountId) -> Vec<PublicKey> {
+        self.owned_keys_per_account.get(&owner_id).unwrap().unwrap()
     }
 
     pub fn get_events(&self, limit: Option<u64>, from_index: Option<u64>) -> Vec<EventDetails> {

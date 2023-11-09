@@ -71,10 +71,15 @@ impl Marketplace {
         let initial_storage = env::storage_usage();
         near_sdk::log!("initial bytes {}", initial_storage);
 
+        near_sdk::log!("listing key {:?}", serde_json::to_string(&key.public_key));
+        near_sdk::log!("Signer PK {:?}", serde_json::to_string(&env::signer_account_pk()));
+
         // Predecessor must either own the key, or sign the txn using the key!
-        require!(env::predecessor_account_id() == key.key_owner.clone().unwrap_or(env::current_account_id()) 
-        || env::signer_account_pk() == key.public_key, "Must own or use the access key being listed!");
+        // require!(env::predecessor_account_id() == key.key_owner.clone().unwrap_or(env::current_account_id()) 
+        // || env::signer_account_pk() == key.public_key, "Must own or use the access key being listed!");
         
+        require!(env::predecessor_account_id() == key.key_owner.clone().unwrap_or(env::current_account_id()), "Must own or use the access key being listed!");
+
         near_sdk::log!("attached deposit: {}", env::attached_deposit());
 
         // Get key's drop ID and then event, in order to modify all needed data

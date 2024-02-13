@@ -63,7 +63,7 @@ pub struct Marketplace {
     pub event_by_id: UnorderedMap<EventID, EventDetails>,
     // Key resales per event
     // Frontend can get drop ID and thus base pricing for each key using get_key_information_batch 
-    pub resales_for_event: LookupMap<EventID, Option<Vec<PublicKey>>>,
+    pub resales_for_event: LookupMap<EventID, Option<Vec<StoredResaleInformation>>>,
 
     // TODO: STORE KEY PASSWORD SOMEWHERE? HOW DOES FRONTEND KNOW WHAT PASSWORD TO PASS IN?
 
@@ -79,14 +79,8 @@ pub struct Marketplace {
     pub listed_keys_per_drop: LookupMap<DropId, Option<Vec<PublicKey>>>,
 
     // **************** By Key ****************
-    // Collection of keys that have been listed per drop -> will use and implement IF ccc's are too much
-    //pub drop_per_key: LookupMap<PublicKey, DropId>,
-    // Price ceiling for listed keys not part of drop, generated automatically on first resale
-    pub max_price_per_dropless_key: LookupMap<PublicKey, U128>,
-    // Approval ID by Public Key, used when user lists key for sale
-    pub approval_id_by_pk: LookupMap<PublicKey, u64>,
-    // Resale price per pk
-    pub resale_per_pk: LookupMap<PublicKey, U128>
+    // Resale Info, including key and price, by Public Key. used when user lists key for sale
+    pub resale_info_per_pk: LookupMap<PublicKey, StoredResaleInformation>
 }
 
 impl Default for Marketplace{
@@ -108,9 +102,7 @@ impl Default for Marketplace{
             listed_keys_per_drop: LookupMap::new(StorageKeys::KeysByDropId),
             // **************** By Key ****************
             //drop_per_key: LookupMap::new(StorageKeys::KeysPerDrop),
-            max_price_per_dropless_key: LookupMap::new(StorageKeys::MaxPricePerKey),
-            approval_id_by_pk: LookupMap::new(StorageKeys::ApprovalIDByPk),
-            resale_per_pk: LookupMap::new(StorageKeys::ResaleForPK),
+            resale_info_per_pk: LookupMap::new(StorageKeys::ResaleForPK),
         }
     }
 }
@@ -142,9 +134,7 @@ impl Marketplace {
              listed_keys_per_drop: LookupMap::new(StorageKeys::KeysByDropId),
              // **************** By Key ****************
              //drop_per_key: LookupMap::new(StorageKeys::KeysPerDrop),
-             max_price_per_dropless_key: LookupMap::new(StorageKeys::MaxPricePerKey),
-             approval_id_by_pk: LookupMap::new(StorageKeys::ApprovalIDByPk),
-             resale_per_pk: LookupMap::new(StorageKeys::ResaleForPK),
+             resale_info_per_pk: LookupMap::new(StorageKeys::ResaleForPK),
         }
     }
 

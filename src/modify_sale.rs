@@ -16,7 +16,6 @@ impl Marketplace {
         new_name: Option<String>,
         new_host: Option<AccountId>,
         new_description: Option<String>,
-
     ){
         self.assert_no_global_freeze();
         let initial_storage = env::storage_usage();
@@ -52,7 +51,7 @@ impl Marketplace {
     pub fn modify_sale_prices(
         &mut self,
         event_id: EventID,
-        new_price_by_drop_id: Option<HashMap<DropId, Option<U128>>>,
+        new_price_by_drop_id: Option<HashMap<DropId, U128>>,
     ){
         self.assert_no_global_freeze();
 
@@ -89,7 +88,7 @@ impl Marketplace {
         near_sdk::log!("initial bytes {}", initial_storage);
 
         // Make sure Key exists on contract
-        require!(self.resale_per_pk.get(&public_key).is_some(), "Key Resale does not exist!");
+        require!(self.resale_info_per_pk.get(&public_key).is_some(), "Key Resale does not exist!");
 
         // Get key's drop ID and then event, in order to modify all needed data
         ext_keypom::ext(AccountId::try_from(self.keypom_contract.to_string()).unwrap())
@@ -118,22 +117,19 @@ impl Marketplace {
                 let drop_id = &key_info.unwrap().drop_id;
                 
                 // Remove from approval_id_by_pk, resale_per_pk, 
-                // listed_keys_per_drop, max_price_per_dropless_key, 
+                // listed_keys_per_drop, 
                 // resales_for_event
 
-                self.resale_per_pk.remove(&public_key);
-                self.approval_id_by_pk.remove(&public_key);
+                self.resale_info_per_pk.remove(&public_key);
 
                 let listed_keys: Vec<PublicKey> = self.listed_keys_per_drop.get(&drop_id).as_ref().unwrap().as_ref().unwrap().to_vec();
                 let new_listed_keys: Vec<PublicKey> = listed_keys.iter().filter(|&x| x != &public_key).cloned().collect();
                 self.listed_keys_per_drop.insert(&drop_id, &Some(new_listed_keys));
-                
-                self.max_price_per_dropless_key.remove(&public_key);
 
                 if self.event_by_drop_id.contains_key(&drop_id){
                     let event_id = self.event_by_drop_id.get(&drop_id).unwrap();
-                    let listed_keys_per_event: Vec<PublicKey> = self.resales_for_event.get(&event_id).as_ref().unwrap().as_ref().unwrap().to_vec();
-                    let new_listed_event_keys: Vec<PublicKey> = listed_keys_per_event.iter().filter(|&x| x != &public_key).cloned().collect();
+                    let listed_keys_per_event: Vec<StoredResaleInformation> = self.resales_for_event.get(&event_id).as_ref().unwrap().as_ref().unwrap().to_vec();
+                    let new_listed_event_keys: Vec<StoredResaleInformation> = listed_keys_per_event.iter().filter(|&x| x.public_key != public_key).cloned().collect();
                     self.resales_for_event.insert(&drop_id, &Some(new_listed_event_keys));
                 }
 

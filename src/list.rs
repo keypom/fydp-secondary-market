@@ -1,3 +1,5 @@
+use near_units::near;
+
 use crate::*;
 
 // Implement the contract structure
@@ -9,22 +11,33 @@ impl Marketplace {
     /// List an event
     #[payable]
     pub fn list_event(
-        &mut self, 
+        &mut self,
+        // Unique event identifier 
         event_id: EventID,
+        // Event Information
         event_name: Option<String>,
         description: Option<String>,
         date: Option<String>,
         host: Option<AccountId>,
+        // Resale Markup
         max_markup: u64,
-        max_tickets: Option<HashMap<DropId, Option<u64>>>,
+        // Associated drops, prices, and max tickets for each. If None, assume unlimited tickets for that drop 
         drop_ids: Option<Vec<DropId>>,
-        price_by_drop_id: Option<HashMap<DropId, Option<U128>>>,
-        // Implement this later, not high priority right now and could be complicated
-        //existing_keys: Option<HashMap<DropId, Vec<PublicKey>>>
+        max_tickets: Option<HashMap<DropId, Option<u64>>>,
+        price_by_drop_id: Option<HashMap<DropId, U128>>,
     ){
         self.assert_no_global_freeze();
         let initial_storage = env::storage_usage();
         near_sdk::log!("initial bytes {}", initial_storage);
+
+        // If drop_ids provided, prices must be provided as well
+        if drop_ids.is_some(){
+            let received_drop_ids = drop_ids.as_ref().unwrap();
+            let received_price_by_drop_id = price_by_drop_id.as_ref().unwrap();
+            for drop_id in received_drop_ids{
+                require!(received_price_by_drop_id.contains_key(drop_id), "Price not provided for all drops!");
+            }
+        }
 
         let final_event_details = self.create_event_details(
             event_id, 
@@ -42,13 +55,10 @@ impl Marketplace {
         self.resales_for_event.insert(&final_event_details.event_id, &None);
  
         // By Drop ID data structures
-        let drop_ids = final_event_details.drop_ids;
-        for drop_id in drop_ids {
+        let stored_drop_ids = final_event_details.drop_ids;
+        for drop_id in stored_drop_ids {
             self.approved_drops.insert(drop_id.clone());
             self.event_by_drop_id.insert(&drop_id, &final_event_details.event_id);
-            // if let Some(pub_key) = &existing_keys.as_ref().unwrap().get(&drop_id){
-            //     self.keys_by_drop_id.insert(&drop_id, &Some(pub_key.to_vec()));
-            // }
             self.listed_keys_per_drop.insert(&drop_id, &None);
         }
 
@@ -59,7 +69,7 @@ impl Marketplace {
         self.charge_deposit(near_sdk::json_types::U128(storage_cost));
     }
     
-    // List a ticket, apply constraints from drop or generate own if not associated with known drop
+    // List a ticket for sale on secondary market
     #[payable]
     pub fn list_ticket(
         &mut self,
@@ -73,23 +83,20 @@ impl Marketplace {
 
         near_sdk::log!("listing key {:?}", serde_json::to_string(&key.public_key));
         near_sdk::log!("Signer PK {:?}", serde_json::to_string(&env::signer_account_pk()));
-
-        // Predecessor must either own the key, or sign the txn using the key!
-        // require!(env::predecessor_account_id() == key.key_owner.clone().unwrap_or(env::current_account_id()) 
-        // || env::signer_account_pk() == key.public_key, "Must own or use the access key being listed!");
         
+        // Predecessor must own the key, or the marketplace must call list_ticket
         require!(env::predecessor_account_id() == key.key_owner.clone().unwrap_or(env::current_account_id()), "Must own or use the access key being listed!");
 
         near_sdk::log!("attached deposit: {}", env::attached_deposit());
 
         // Get key's drop ID and then event, in order to modify all needed data
         ext_keypom::ext(AccountId::try_from(self.keypom_contract.to_string()).unwrap())
-                       .get_key_information(String::try_from(&key.public_key).unwrap())
-                       .then(
-                            Self::ext(env::current_account_id())
-                            .with_attached_deposit(env::attached_deposit())
-                            .internal_list_ticket(key, price, approval_id, initial_storage)
-                        );
+            .get_key_information(String::try_from(&key.public_key).unwrap())
+            .then(
+                 Self::ext(env::current_account_id())
+                 .with_attached_deposit(env::attached_deposit())
+                 .internal_list_ticket(key, price, approval_id, initial_storage)
+             );
     }
 
     #[private] #[payable]
@@ -101,96 +108,70 @@ impl Marketplace {
         initial_storage: u64
     ){
         
-         // Parse Response and Check if Fractal is in owned tokens
+         // Parse Response to ensure key exists on Keypom first
          if let PromiseResult::Successful(val) = env::promise_result(0) {
             // expected result: Result<ExtKeyInfo, String>
             
             if let Ok(key_info) = near_sdk::serde_json::from_slice::<ExtKeyInfo>(&val) {
-                let drop_id = key_info.drop_id;
-                
-                // Case 1: Key associated with event
                 // Data structures to update: event_by_id, resales_for_event, listed_keys_per_drop, approval_id_by_pk, resale_per_pk
-                if let Some(event_id) = self.event_by_drop_id.get(&drop_id).as_ref(){
-                    let event = self.event_by_id.get(&event_id).expect("No event found for Event ID");
-                    
-                    // Clamp price using max_markup
-                    let mut final_price = price;
-                    if let Some(base_price) = event.price_by_drop_id.get(&drop_id){
-                        if base_price.is_some() && u128::from(price).gt(&(u128::from(base_price.unwrap()) * event.max_markup as u128)){
-                            let max_price = u128::from(base_price.unwrap()) * event.max_markup as u128;
-                            final_price = base_price.unwrap();
-                            if price.gt(&U128::from(max_price)){
-                                final_price = U128::from(max_price);
-                            }
-                        }
-                    }
-
-                    // Resale per PK and approval ID per PK
-                    self.resale_per_pk.insert(&key.public_key, &final_price);
-                    self.approval_id_by_pk.insert(&key.public_key, &approval_id);
-                    
-                    // ensure listed keys per drop contains this key
-                    if self.listed_keys_per_drop.contains_key(&drop_id){
-                        if self.listed_keys_per_drop.get(&drop_id).as_ref().unwrap().is_none(){
-                            // No existing vector
-                            let mut keys_vec: Vec<PublicKey> = Vec::new();
-                            keys_vec.push(key.public_key.clone());
-                            self.listed_keys_per_drop.insert(&drop_id, &Some(keys_vec));
-                        }else{
-                            self.listed_keys_per_drop.get(&drop_id).unwrap().unwrap().push(key.public_key.clone());
-                        }
-                    }else{
-                       // Create new drop <-> vector pairing
-                       let mut keys_vec: Vec<PublicKey> = Vec::new();
-                       keys_vec.push(key.public_key.clone());
-                       self.listed_keys_per_drop.insert(&drop_id, &Some(keys_vec));
-                    }
-
-                    // ensure resales for event contains this key
-                    if self.resales_for_event.contains_key(&event_id){
-                        if self.resales_for_event.get(&event_id).as_ref().unwrap().is_none(){
-                            // No existing vector
-                            let mut keys_vec: Vec<PublicKey> = Vec::new();
-                            keys_vec.push(key.public_key.clone());
-                            self.resales_for_event.insert(&event_id, &Some(keys_vec));
-                        }else{
-                            self.resales_for_event.get(&event_id).unwrap().unwrap().push(key.public_key.clone());
-                        }
-                    }else{
-                       // Create new drop <-> vector pairing
-                       let mut keys_vec: Vec<PublicKey> = Vec::new();
-                       keys_vec.push(key.public_key.clone());
-                       self.resales_for_event.insert(&event_id, &Some(keys_vec));
-                    }
+                let drop_id = key_info.drop_id;
+                // Require the key to be associated with an event                
+                let event_id = self.event_by_drop_id.get(&drop_id).expect("Key not associated with any event, cannot list!");
+                let event = self.event_by_id.get(&event_id).expect("No event found for Event ID");
+                
+                // Clamp price using max_markup
+                let mut final_price = price;
+                let base_price = event.price_by_drop_id.get(&drop_id).expect("No base price found for drop, cannot set max price");
+                let max_price = u128::from(base_price.clone()) * event.max_markup as u128;
+                if u128::from(price).gt(&max_price){
+                    final_price = U128::from(max_price);
                 }
-                 // Case 2: Key not associated with event
-                 // Data Structures to update: max_price_per_dropless_key, approval_id_by_pk, resale_per_pk, listed_keys_per_drop, approved_drops
-                else{
-                    // Add to dropless key data structures - max_price, approval by pk, resale by pk, approved drops, listed keys per drop
-                    let max_price = u128::from(price) * 2;
-                    self.max_price_per_dropless_key.insert(&key.public_key, &U128::from(max_price));
-                    self.approval_id_by_pk.insert(&key.public_key, &approval_id);
-                    self.resale_per_pk.insert(&key.public_key, &price);
-                    if !self.approved_drops.contains(&drop_id){
-                        self.approved_drops.insert(drop_id.clone());
-                    }
-                    
-                    if self.listed_keys_per_drop.contains_key(&drop_id){
-                        if self.listed_keys_per_drop.get(&drop_id).as_ref().unwrap().is_none(){
-                            // No existing vector
-                            let mut keys_vec: Vec<PublicKey> = Vec::new();
-                            keys_vec.push(key.public_key.clone());
-                            self.listed_keys_per_drop.insert(&drop_id, &Some(keys_vec));
-                        }else{
-                            self.listed_keys_per_drop.get(&drop_id).unwrap().unwrap().push(key.public_key.clone());
-                        }
-                    }else{
-                        // Create new drop <-> vector pairing
+
+                // Resale per PK and approval ID per PK
+                self.resale_info_per_pk.insert(&key.public_key, &StoredResaleInformation{
+                    price: final_price,
+                    public_key: key.public_key.clone(),
+                    approval_id: Some(approval_id),
+                });
+                
+                // ensure listed keys per drop contains this key
+                if self.listed_keys_per_drop.contains_key(&drop_id){
+                    if self.listed_keys_per_drop.get(&drop_id).as_ref().unwrap().is_none(){
+                        // No existing vector
                         let mut keys_vec: Vec<PublicKey> = Vec::new();
                         keys_vec.push(key.public_key.clone());
                         self.listed_keys_per_drop.insert(&drop_id, &Some(keys_vec));
+                    }else{
+                        self.listed_keys_per_drop.get(&drop_id).unwrap().unwrap().push(key.public_key.clone());
                     }
+                }else{
+                   // Create new drop <-> vector pairing
+                   let mut keys_vec: Vec<PublicKey> = Vec::new();
+                   keys_vec.push(key.public_key.clone());
+                   self.listed_keys_per_drop.insert(&drop_id, &Some(keys_vec));
+                }
 
+                let resale_info: StoredResaleInformation = StoredResaleInformation{
+                    price: final_price,
+                    public_key: key.public_key.clone(),
+                    approval_id: Some(approval_id),
+                };
+                // ensure resales for event contains this key
+                if self.resales_for_event.contains_key(&event_id){
+                    if self.resales_for_event.get(&event_id).as_ref().unwrap().is_none(){
+                        // No existing vector
+                        let mut resale_vec: Vec<StoredResaleInformation> = Vec::new();
+                        resale_vec.push(resale_info);
+                        self.resales_for_event.insert(&event_id, &Some(resale_vec));
+                    }else{
+                        // Existing vector
+                        self.resales_for_event.get(&event_id).unwrap().unwrap().push(resale_info);
+                    }
+                }else{
+                   // Create new drop <-> vector pairing
+                   let mut resale_vec: Vec<StoredResaleInformation> = Vec::new();
+                   resale_vec.push(resale_info);
+                   self.resales_for_event.insert(&event_id, &Some(resale_vec));
                 }
             } else {
              env::panic_str("ERR_WRONG_VAL_RECEIVED")
@@ -217,8 +198,6 @@ impl Marketplace {
         &mut self, 
         event_id: EventID,
         added_drops: HashMap<DropId, AddedDropDetails>,
-        // Implement this later, not high priority right now and could be complicated
-        //existing_keys: Option<HashMap<DropId, Vec<PublicKey>>>
     ){
         // Data Structures to update: event_by_id (EventDetails), approved_drops, event_by_drop_id, listed_keys_per_drop
         // EventDetails fields to update: max_tickets, drop_ids, price_by_drop_ids

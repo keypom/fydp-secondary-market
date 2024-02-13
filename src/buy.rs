@@ -1,5 +1,7 @@
 use std::string;
 
+use near_sdk::store::key;
+
 use crate::*;
 
 // Implement the contract structure
@@ -28,12 +30,13 @@ impl Marketplace {
         require!(tier < tiered_drops.len(), "Desired Tier not in valid");
         
         let desired_drop = tiered_drops.get(tier).unwrap();
-        let price = self.event_by_id.get(&event_id).as_ref().unwrap().price_by_drop_id.get(&desired_drop.to_string()).unwrap().unwrap_or(near_sdk::json_types::U128(0));
-        require!(received_deposit >= u128::from(price), "Not enough attached deposit to fund purchase at specified ticket tier!");
+        let binding = self.event_by_id.get(&event_id);
+        let price = binding.as_ref().unwrap().price_by_drop_id.get(&desired_drop.to_string()).unwrap();
+        require!(received_deposit >= u128::from(price.clone()), "Not enough attached deposit to fund purchase at specified ticket tier!");
 
         require!(self.approved_drops.contains(&desired_drop.to_string()), "No drop found");
 
-        near_sdk::log!("Trying to purchase key on drop ID {} at price of {}", desired_drop, u128::from(price));
+        near_sdk::log!("Trying to purchase key on drop ID {} at price of {}", desired_drop, u128::from(price.clone()));
         near_sdk::log!("Received paymnet: {}", received_deposit);
         let mut keys_vec = Vec::new();
         let public_key = new_key_info.public_key.clone();
@@ -108,11 +111,12 @@ impl Marketplace {
 
         // Verify Sale - price wise, was attached deposit enough?
         let received_deposit = env::attached_deposit();
-        let price = self.resale_per_pk.get(&public_key).expect("No resale for found this private key");
+        let resale_info =  self.resale_info_per_pk.get(&public_key).expect("No resale for found this private key");
+        let price = resale_info.price;
         require!(received_deposit >= u128::from(price), "Not enough attached deposit to fund purchase at specified ticket tier!");
         require!(new_public_key != public_key, "New and old key cannot be the same");
 
-        let approval_id = self.approval_id_by_pk.get(&public_key).expect("No approval ID found for PK");
+        let approval_id = resale_info.approval_id;
 
         let pk_string = String::from(&public_key);
         near_sdk::log!("getting key information with {:?}", pk_string);
@@ -134,7 +138,7 @@ impl Marketplace {
         predecessor: AccountId,
         new_owner_id: Option<AccountId>,
         new_public_key: PublicKey,
-        approval_id: u64
+        approval_id: Option<u64>
     ){
          // Parse Response and Check if Fractal is in owned tokens
          if let PromiseResult::Successful(val) = env::promise_result(0) {
@@ -144,8 +148,13 @@ impl Marketplace {
                 let drop_id = &key_info.drop_id;
                 let old_owner = &key_info.owner_id;
 
+                // if key is not owned by contract, approval is required
+                if key_info.owner_id != env::current_account_id(){
+                    require!(approval_id.is_some(), "Approval ID is required for resale of non-owned keys");
+                }
+
                 ext_keypom::ext(AccountId::try_from(self.keypom_contract.to_string()).unwrap())
-                       .nft_transfer(Some(token_id.clone()), new_owner_id, Some(approval_id), new_public_key)
+                       .nft_transfer(Some(token_id.clone()), new_owner_id, approval_id, new_public_key)
                        .then(
                             Self::ext(env::current_account_id())
                             .buy_resale_callback(initial_storage, predecessor, public_key, drop_id.to_string(), old_owner.clone())
@@ -173,8 +182,7 @@ impl Marketplace {
              // Parse Response and Check if Fractal is in owned tokens
         if let PromiseResult::Successful(val) = env::promise_result(0) {
             near_sdk::log!("made it into resale callback");
-            self.resale_per_pk.remove(&public_key);
-            self.approval_id_by_pk.remove(&public_key);
+            self.resale_info_per_pk.remove(&public_key);
             let listed_keys: Vec<PublicKey> = self.listed_keys_per_drop.get(&drop_id).as_ref().unwrap().as_ref().unwrap().to_vec();
             let new_listed_keys: Vec<PublicKey> = listed_keys.iter().filter(|&x| x != &public_key).cloned().collect();
             self.listed_keys_per_drop.insert(&drop_id, &Some(new_listed_keys));
@@ -186,11 +194,10 @@ impl Marketplace {
             }
             
             
-            self.max_price_per_dropless_key.remove(&public_key);
             if self.event_by_drop_id.contains_key(&drop_id){
                 let event_id = self.event_by_drop_id.get(&drop_id).unwrap();
-                let listed_keys_per_event: Vec<PublicKey> = self.resales_for_event.get(&event_id).as_ref().unwrap().as_ref().unwrap().to_vec();
-                let new_listed_event_keys: Vec<PublicKey> = listed_keys_per_event.iter().filter(|&x| x != &public_key).cloned().collect();
+                let listed_keys_per_event: Vec<StoredResaleInformation> = self.resales_for_event.get(&event_id).as_ref().unwrap().as_ref().unwrap().to_vec();
+                let new_listed_event_keys: Vec<StoredResaleInformation> = listed_keys_per_event.iter().filter(|&x| x.public_key != public_key).cloned().collect();
                 self.resales_for_event.insert(&drop_id, &Some(new_listed_event_keys));
             }
             let final_storage = env::storage_usage();

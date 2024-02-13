@@ -12,6 +12,5 @@ impl Marketplace {
         near_sdk::log!("Refunding {} excess deposit", amount_to_refund);
         Promise::new(predecessor).transfer(amount_to_refund);
         return;
-    
     }
 }

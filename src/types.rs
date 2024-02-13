@@ -51,9 +51,8 @@ pub struct EventDetails {
     // Associated Drop IDs
     // drop - tier link create here, either implicitely through vec or unorderedmap 
     pub drop_ids: Vec<DropId>,
-    // Tiered Pricing?
-    pub price_by_drop_id: HashMap<DropId, Option<U128>>,
-    // Every event should be capable of tiered ticketing, i.e multiple drops per event
+    // Tiered Pricing
+    pub price_by_drop_id: HashMap<DropId, U128>,
 }
 
 #[derive(BorshDeserialize, BorshSerialize, Serialize, Deserialize, Clone)]
@@ -63,9 +62,7 @@ pub struct AddedDropDetails {
     // Maximum number of tickets
     pub max_tickets: Option<u64>,
     // Tiered Pricing?
-    pub price_by_drop_id: Option<U128>,
-    
-    // Every event should be capable of tiered ticketing, i.e multiple drops per event
+    pub price_by_drop_id: U128,
 }
 
 

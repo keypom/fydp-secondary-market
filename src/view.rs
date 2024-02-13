@@ -5,6 +5,7 @@ use crate::*;
 pub struct ResaleInformation {
     pub price: U128,
     pub public_key: PublicKey,
+    pub approval_id: Option<u64>,
     // Public Facing event name
     pub event_name: Option<String>,
     // Event hosts, not necessarily the same as all the drop funders
@@ -16,6 +17,13 @@ pub struct ResaleInformation {
     // Date
     pub date: Option<String>,
    
+}
+#[near_bindgen]
+#[derive(BorshDeserialize, BorshSerialize, Serialize, Deserialize, Clone)]
+pub struct StoredResaleInformation {
+    pub price: U128,
+    pub public_key: PublicKey,
+    pub approval_id: Option<u64>,
 }
 
 #[near_bindgen]
@@ -45,7 +53,7 @@ impl Marketplace{
         .collect::<Vec<DropId>>();
 
         sorted_drop_ids.sort_by_key(|drop_id| {
-            self.event_by_id.get(&event_id).as_ref().unwrap().price_by_drop_id.get(drop_id).as_ref().map(|opt_balance| opt_balance.unwrap_or(U128::from(0)))
+            self.event_by_id.get(&event_id).as_ref().unwrap().price_by_drop_id.get(drop_id).as_ref();
         });
 
         // sort high to low if specified, otherwise, keep it low to high
@@ -64,11 +72,11 @@ impl Marketplace{
     }
 
     pub fn get_resale_price_per_pk(&self, public_key: PublicKey) -> U128 {
-        self.resale_per_pk.get(&public_key).expect("No resale for Public Key")
+        self.resale_info_per_pk.get(&public_key).expect("No resale for Public Key").price
     }
 
-    pub fn get_resales_for_event(&self, event_id: EventID) -> Option<Vec<PublicKey>> {
-        self.resales_for_event.get(&event_id).unwrap()
+    pub fn get_resales_for_event(&self, event_id: EventID) -> Option<Vec<StoredResaleInformation>> {
+        self.resales_for_event.get(&event_id).expect("No Resales for Event")
     }
 
     pub fn get_all_resales(&self) -> Vec<ResaleInformation> {
@@ -91,8 +99,9 @@ impl Marketplace{
             let resales = self.get_resales_for_event(event_id);
             for resale in resales.unwrap_or(Vec::new()) {
                 let resale_info = ResaleInformation{
-                    price: self.get_resale_price_per_pk(resale.clone()),
-                    public_key: resale,
+                    price: resale.price,
+                    public_key: resale.public_key,
+                    approval_id: resale.approval_id,
                     event_id: Some(all_events_copy.get(index).unwrap().clone()),
                     event_name: event_name.clone(),
                     host: host.clone(),

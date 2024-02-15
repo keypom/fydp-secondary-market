@@ -9,7 +9,7 @@ pub struct ResaleInformation {
     // Public Facing event name
     pub event_name: Option<String>,
     // Event hosts, not necessarily the same as all the drop funders
-    pub host: Option<AccountId>,
+    pub host: AccountId,
     // Event ID, in case on needing to abstract on contract to multiple drops per event
     // For now, event ID is drop ID
     pub event_id: Option<String>,
@@ -32,7 +32,7 @@ impl Marketplace{
     // View calls -> all events/drops, filter by funder, get event info, get owner, keypom constract, resale price per pk, resales per event, etc.
     pub fn get_events_per_funder(&self, funder: AccountId, limit: Option<u64>, from_index: Option<u64>) -> Vec<EventDetails>{
         // TODO: Add limit and from_index
-        let funder_events: Vec<EventDetails> = self.event_by_id.iter().filter(|x| x.1.host == Some(funder.clone())).map(|x| x.1).collect();
+        let funder_events: Vec<EventDetails> = self.event_by_id.iter().filter(|x| x.1.host == funder.clone()).map(|x| x.1).collect();
         let start = u128::from(from_index.unwrap_or(0));
          // Iterate through each token using an iterator
          funder_events.into_iter()
@@ -44,26 +44,26 @@ impl Marketplace{
          .collect()
     }
 
-    pub fn get_tiered_drop_list_for_event(&self, event_id: EventID, high_to_low: Option<bool>) -> Vec<DropId> {
-        let drops: Vec<DropId> = self.event_by_id.get(&event_id).unwrap().drop_ids;
-        let mut sorted_drop_ids = drops
-        .iter()
-        .filter(|&drop_id| self.event_by_id.get(&event_id).as_ref().unwrap().price_by_drop_id.contains_key(drop_id))
-        .cloned()
-        .collect::<Vec<DropId>>();
+    // Probably not needed
+    pub fn get_num_tiers_per_event(&self, event_id: EventID) -> u64 {
+        self.event_by_id.get(&event_id).unwrap().drop_ids.len() as u64
+    }
 
-        sorted_drop_ids.sort_by_key(|drop_id| {
-            self.event_by_id.get(&event_id).as_ref().unwrap().price_by_drop_id.get(drop_id).as_ref();
+    // TODO: RECONSIDER THIS WHOLE ARCHITECTURE
+    // return sorted list of drop IDs based on price, default high to low pricing
+    pub fn get_tiered_drop_list_for_event(&self, event_id: EventID, high_to_low: Option<bool>) -> Vec<DropId> {
+        let mut drops: Vec<DropId> = self.event_by_id.get(&event_id).unwrap().drop_ids;
+
+        drops.sort_by_key(|drop_id| {
+            self.event_by_id.get(&event_id).as_ref().unwrap().price_by_drop_id.get(drop_id).unwrap().clone()
         });
 
         // sort high to low if specified, otherwise, keep it low to high
         if high_to_low.unwrap_or(false){
-            sorted_drop_ids.reverse();
+            drops.reverse();
         }
-        // Returns lowest price first, up to highest price
-        //sorted_drop_ids.reverse();
-        sorted_drop_ids
-
+        
+        drops
     }
 
     pub fn get_event_information(&self, event_id: EventID) -> EventDetails {
@@ -75,8 +75,8 @@ impl Marketplace{
         self.resale_info_per_pk.get(&public_key).expect("No resale for Public Key").price
     }
 
-    pub fn get_resales_for_event(&self, event_id: EventID) -> Option<Vec<StoredResaleInformation>> {
-        self.resales_for_event.get(&event_id).expect("No Resales for Event")
+    pub fn get_resales_per_event(&self, event_id: EventID) -> Option<Vec<StoredResaleInformation>> {
+        self.resales_per_event.get(&event_id).expect("No Resales for Event")
     }
 
     pub fn get_all_resales(&self) -> Vec<ResaleInformation> {
@@ -96,7 +96,7 @@ impl Marketplace{
             description = self.event_by_id.get(&event_id).unwrap().description.clone();
             date = self.event_by_id.get(&event_id).unwrap().date.clone();
 
-            let resales = self.get_resales_for_event(event_id);
+            let resales = self.get_resales_per_event(event_id);
             for resale in resales.unwrap_or(Vec::new()) {
                 let resale_info = ResaleInformation{
                     price: resale.price,

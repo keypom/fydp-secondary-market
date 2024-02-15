@@ -62,8 +62,7 @@ pub struct Marketplace {
     // Event/Drop Information per Drop
     pub event_by_id: UnorderedMap<EventID, EventDetails>,
     // Key resales per event
-    // Frontend can get drop ID and thus base pricing for each key using get_key_information_batch 
-    pub resales_for_event: LookupMap<EventID, Option<Vec<StoredResaleInformation>>>,
+    pub resales_per_event: LookupMap<EventID, Option<Vec<StoredResaleInformation>>>,
 
     // TODO: STORE KEY PASSWORD SOMEWHERE? HOW DOES FRONTEND KNOW WHAT PASSWORD TO PASS IN?
 
@@ -76,7 +75,7 @@ pub struct Marketplace {
     // Event ID given a drop ID
     pub event_by_drop_id: LookupMap<DropId, EventID>,
     // Collection of keys that have been listed per drop
-    pub listed_keys_per_drop: LookupMap<DropId, Option<Vec<PublicKey>>>,
+    pub resales_per_drop: LookupMap<DropId, Option<Vec<StoredResaleInformation>>>,
 
     // **************** By Key ****************
     // Resale Info, including key and price, by Public Key. used when user lists key for sale
@@ -93,15 +92,14 @@ impl Default for Marketplace{
             keypom_contract: AccountId::try_from("testing-nearcon-keypom.testnet".to_string()).unwrap(),
             // **************** By Event ID ****************
             event_by_id: UnorderedMap::new(StorageKeys::EventInfoPerDrop),
-            resales_for_event: LookupMap::new(StorageKeys::ResalePerEvent),
+            resales_per_event: LookupMap::new(StorageKeys::ResalePerEvent),
             // **************** By Account ****************
             owned_keys_per_account: LookupMap::new(StorageKeys::KeysForOwner),
             // **************** By Drop ****************
             approved_drops: HashSet::new(),
             event_by_drop_id: LookupMap::new(StorageKeys::EventByDropId),
-            listed_keys_per_drop: LookupMap::new(StorageKeys::KeysByDropId),
+            resales_per_drop: LookupMap::new(StorageKeys::KeysByDropId),
             // **************** By Key ****************
-            //drop_per_key: LookupMap::new(StorageKeys::KeysPerDrop),
             resale_info_per_pk: LookupMap::new(StorageKeys::ResaleForPK),
         }
     }
@@ -125,15 +123,14 @@ impl Marketplace {
              keypom_contract: AccountId::try_from(keypom_contract.to_string()).unwrap(),
              // **************** By Event ID ****************
              event_by_id: UnorderedMap::new(StorageKeys::EventInfoPerDrop),
-             resales_for_event: LookupMap::new(StorageKeys::ResalePerEvent),
+             resales_per_event: LookupMap::new(StorageKeys::ResalePerEvent),
              // **************** By Account ****************
             owned_keys_per_account: LookupMap::new(StorageKeys::KeysForOwner),
              // **************** By Drop ****************
              approved_drops: HashSet::new(),
              event_by_drop_id: LookupMap::new(StorageKeys::EventByDropId),
-             listed_keys_per_drop: LookupMap::new(StorageKeys::KeysByDropId),
+             resales_per_drop: LookupMap::new(StorageKeys::KeysByDropId),
              // **************** By Key ****************
-             //drop_per_key: LookupMap::new(StorageKeys::KeysPerDrop),
              resale_info_per_pk: LookupMap::new(StorageKeys::ResaleForPK),
         }
     }

@@ -22,27 +22,17 @@ impl Marketplace {
         near_sdk::log!("initial bytes {}", initial_storage);
 
         require!(self.event_by_id.get(&event_id).is_some(), "No Event Found");
-        require!(self.event_by_id.get(&event_id).unwrap().host == Some(env::predecessor_account_id()), "Must be event host to modify event details!");
+        require!(self.event_by_id.get(&event_id).unwrap().host == env::predecessor_account_id(), "Must be event host to modify event details!");
         let mut event_details = self.event_by_id.get(&event_id).expect("No Event Found");
         event_details.name = new_name;
         if new_host.is_some(){
-            event_details.host = new_host;
+            event_details.host = new_host.unwrap();
         }
         event_details.description = new_description;
         self.event_by_id.insert(&event_id, &event_details);
 
         let final_storage = env::storage_usage();
-        if final_storage > initial_storage {
-            let storage_used = final_storage - initial_storage;
-            self.charge_deposit(near_sdk::json_types::U128((storage_used as u128 * env::storage_byte_cost()) as u128));
-        }
-        else if final_storage < initial_storage {
-            let storage_freed = initial_storage - final_storage;
-            Promise::new(env::predecessor_account_id()).transfer(storage_freed as u128 * env::storage_byte_cost() as u128).as_return();   
-        }
-        else{
-            Promise::new(env::predecessor_account_id()).transfer(0).as_return();   
-        }
+        self.charge_storage(initial_storage, final_storage);
 
     }
 
@@ -54,14 +44,18 @@ impl Marketplace {
         new_price_by_drop_id: Option<HashMap<DropId, U128>>,
     ){
         self.assert_no_global_freeze();
+        let initial_storage = env::storage_usage();
+        near_sdk::log!("initial bytes {}", initial_storage);
 
         require!(self.event_by_id.get(&event_id).is_some(), "No Event Found");
-        require!(self.event_by_id.get(&event_id).unwrap().host == Some(env::predecessor_account_id()), "Must be event host to modify event details!");
+        require!(self.event_by_id.get(&event_id).unwrap().host == env::predecessor_account_id(), "Must be event host to modify event details!");
 
         let mut event = self.event_by_id.get(&event_id).expect("No Event Found");
         event.price_by_drop_id = new_price_by_drop_id.unwrap();
         self.event_by_id.insert(&event_id, &event);
 
+        let final_storage = env::storage_usage();
+        self.charge_storage(initial_storage, final_storage);
     }
     
     /// Modify a Drop's Resale Conditions
@@ -71,6 +65,7 @@ impl Marketplace {
         event_id: EventID,
         new_markup: u64
     ){
+        require!(env::predecessor_account_id() == self.event_by_id.get(&event_id).unwrap().host, "Must be event host to modify event details!");
         let mut event = self.event_by_id.get(&event_id).expect("No Event Found");
         event.max_markup = new_markup;
         self.event_by_id.insert(&event_id, &event);
@@ -78,7 +73,7 @@ impl Marketplace {
     
     // Modify a Key's Resale Conditions
     
-    // Rovoke a Resale
+    // Rovoke a Resale - only key owner can do this
     pub fn revoke_resale(
         &mut self,
         public_key: PublicKey,
@@ -117,20 +112,20 @@ impl Marketplace {
                 let drop_id = &key_info.unwrap().drop_id;
                 
                 // Remove from approval_id_by_pk, resale_per_pk, 
-                // listed_keys_per_drop, 
-                // resales_for_event
+                // resales_per_drop, 
+                // resales_per_event
 
                 self.resale_info_per_pk.remove(&public_key);
 
-                let listed_keys: Vec<PublicKey> = self.listed_keys_per_drop.get(&drop_id).as_ref().unwrap().as_ref().unwrap().to_vec();
-                let new_listed_keys: Vec<PublicKey> = listed_keys.iter().filter(|&x| x != &public_key).cloned().collect();
-                self.listed_keys_per_drop.insert(&drop_id, &Some(new_listed_keys));
+                let listed_resales: Vec<StoredResaleInformation> = self.resales_per_drop.get(&drop_id).as_ref().unwrap().as_ref().unwrap().to_vec();
+                let new_listed_resales: Vec<StoredResaleInformation> = listed_resales.iter().filter(|&x| x.public_key != public_key).cloned().collect();
+                self.resales_per_drop.insert(&drop_id, &Some(new_listed_resales));
 
                 if self.event_by_drop_id.contains_key(&drop_id){
                     let event_id = self.event_by_drop_id.get(&drop_id).unwrap();
-                    let listed_keys_per_event: Vec<StoredResaleInformation> = self.resales_for_event.get(&event_id).as_ref().unwrap().as_ref().unwrap().to_vec();
+                    let listed_keys_per_event: Vec<StoredResaleInformation> = self.resales_per_event.get(&event_id).as_ref().unwrap().as_ref().unwrap().to_vec();
                     let new_listed_event_keys: Vec<StoredResaleInformation> = listed_keys_per_event.iter().filter(|&x| x.public_key != public_key).cloned().collect();
-                    self.resales_for_event.insert(&drop_id, &Some(new_listed_event_keys));
+                    self.resales_per_event.insert(&drop_id, &Some(new_listed_event_keys));
                 }
 
                 let final_storage = env::storage_usage();

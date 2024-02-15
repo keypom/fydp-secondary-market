@@ -34,7 +34,7 @@ pub struct EventDetails {
     // Public Facing event name
     pub name: Option<String>,
     // Event hosts, not necessarily the same as all the drop funders
-    pub host: Option<AccountId>,
+    pub host: AccountId,
     // Event ID, in case on needing to abstract on contract to multiple drops per event
     // For now, event ID is drop ID
     pub event_id: String,

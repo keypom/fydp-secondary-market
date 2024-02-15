@@ -19,7 +19,7 @@ impl Marketplace{
 
         let event_details = EventDetails{
             name: event_name,
-            host: Some(host.unwrap_or(env::predecessor_account_id())),
+            host: host.unwrap_or(env::predecessor_account_id()),
             event_id,
             status: Status::Active,
             description,
@@ -32,4 +32,5 @@ impl Marketplace{
         };
         return event_details
     }
+
 }

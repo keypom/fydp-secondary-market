@@ -52,14 +52,14 @@ impl Marketplace {
 
         // Insert by event ID stuff first
         self.event_by_id.insert(&final_event_details.event_id, &final_event_details);
-        self.resales_for_event.insert(&final_event_details.event_id, &None);
+        self.resales_per_event.insert(&final_event_details.event_id, &None);
  
         // By Drop ID data structures
         let stored_drop_ids = final_event_details.drop_ids;
         for drop_id in stored_drop_ids {
             self.approved_drops.insert(drop_id.clone());
             self.event_by_drop_id.insert(&drop_id, &final_event_details.event_id);
-            self.listed_keys_per_drop.insert(&drop_id, &None);
+            self.resales_per_drop.insert(&drop_id, &None);
         }
 
         // Calculate used storage and charge the user
@@ -108,13 +108,14 @@ impl Marketplace {
         initial_storage: u64
     ){
         
-         // Parse Response to ensure key exists on Keypom first
-         if let PromiseResult::Successful(val) = env::promise_result(0) {
+        // Parse Response to ensure key exists on Keypom first
+        if let PromiseResult::Successful(val) = env::promise_result(0) {
             // expected result: Result<ExtKeyInfo, String>
             
             if let Ok(key_info) = near_sdk::serde_json::from_slice::<ExtKeyInfo>(&val) {
-                // Data structures to update: event_by_id, resales_for_event, listed_keys_per_drop, approval_id_by_pk, resale_per_pk
+                // Data structures to update: event_by_id, resales_per_event, resales_per_drop, approval_id_by_pk, resale_per_pk
                 let drop_id = key_info.drop_id;
+
                 // Require the key to be associated with an event                
                 let event_id = self.event_by_drop_id.get(&drop_id).expect("Key not associated with any event, cannot list!");
                 let event = self.event_by_id.get(&event_id).expect("No event found for Event ID");
@@ -127,54 +128,52 @@ impl Marketplace {
                     final_price = U128::from(max_price);
                 }
 
-                // Resale per PK and approval ID per PK
-                self.resale_info_per_pk.insert(&key.public_key, &StoredResaleInformation{
-                    price: final_price,
-                    public_key: key.public_key.clone(),
-                    approval_id: Some(approval_id),
-                });
-                
-                // ensure listed keys per drop contains this key
-                if self.listed_keys_per_drop.contains_key(&drop_id){
-                    if self.listed_keys_per_drop.get(&drop_id).as_ref().unwrap().is_none(){
-                        // No existing vector
-                        let mut keys_vec: Vec<PublicKey> = Vec::new();
-                        keys_vec.push(key.public_key.clone());
-                        self.listed_keys_per_drop.insert(&drop_id, &Some(keys_vec));
-                    }else{
-                        self.listed_keys_per_drop.get(&drop_id).unwrap().unwrap().push(key.public_key.clone());
-                    }
-                }else{
-                   // Create new drop <-> vector pairing
-                   let mut keys_vec: Vec<PublicKey> = Vec::new();
-                   keys_vec.push(key.public_key.clone());
-                   self.listed_keys_per_drop.insert(&drop_id, &Some(keys_vec));
-                }
-
+                // resale info object
                 let resale_info: StoredResaleInformation = StoredResaleInformation{
                     price: final_price,
                     public_key: key.public_key.clone(),
                     approval_id: Some(approval_id),
                 };
-                // ensure resales for event contains this key
-                if self.resales_for_event.contains_key(&event_id){
-                    if self.resales_for_event.get(&event_id).as_ref().unwrap().is_none(){
+
+                // Resale per PK
+                self.resale_info_per_pk.insert(&key.public_key, &resale_info);
+
+                // updated listed resales per drop, if drop has no resales, add drop to this resaleInfo
+                if self.resales_per_drop.contains_key(&drop_id){
+                    if self.resales_per_drop.get(&drop_id).as_ref().unwrap().is_none(){
                         // No existing vector
                         let mut resale_vec: Vec<StoredResaleInformation> = Vec::new();
-                        resale_vec.push(resale_info);
-                        self.resales_for_event.insert(&event_id, &Some(resale_vec));
+                        resale_vec.push(resale_info.clone());
+                        self.resales_per_drop.insert(&event_id, &Some(resale_vec));
+                    }else{
+                        self.resales_per_drop.get(&drop_id).unwrap().unwrap().push(resale_info.clone());
+                    }
+                }else{
+                    // Create new drop <-> vector pairing
+                    let mut resale_vec: Vec<StoredResaleInformation> = Vec::new();
+                    resale_vec.push(resale_info.clone());
+                    self.resales_per_drop.insert(&drop_id, &Some(resale_vec));
+                }
+
+                // updated resales for event, if drop has no resales, add event to this resaleInfo
+                if self.resales_per_event.contains_key(&event_id){
+                    if self.resales_per_event.get(&event_id).as_ref().unwrap().is_none(){
+                        // No existing vector
+                        let mut resale_vec: Vec<StoredResaleInformation> = Vec::new();
+                        resale_vec.push(resale_info.clone());
+                        self.resales_per_event.insert(&event_id, &Some(resale_vec));
                     }else{
                         // Existing vector
-                        self.resales_for_event.get(&event_id).unwrap().unwrap().push(resale_info);
+                        self.resales_per_event.get(&event_id).unwrap().unwrap().push(resale_info);
                     }
                 }else{
                    // Create new drop <-> vector pairing
                    let mut resale_vec: Vec<StoredResaleInformation> = Vec::new();
-                   resale_vec.push(resale_info);
-                   self.resales_for_event.insert(&event_id, &Some(resale_vec));
+                   resale_vec.push(resale_info.clone());
+                   self.resales_per_event.insert(&event_id, &Some(resale_vec));
                 }
             } else {
-             env::panic_str("ERR_WRONG_VAL_RECEIVED")
+             env::panic_str("Could Not Parse KeyInfo")
             }      
         }
         else{
@@ -199,7 +198,7 @@ impl Marketplace {
         event_id: EventID,
         added_drops: HashMap<DropId, AddedDropDetails>,
     ){
-        // Data Structures to update: event_by_id (EventDetails), approved_drops, event_by_drop_id, listed_keys_per_drop
+        // Data Structures to update: event_by_id (EventDetails), approved_drops, event_by_drop_id, resales_per_drop
         // EventDetails fields to update: max_tickets, drop_ids, price_by_drop_ids
 
         // Ensure no global freeze and event exists
@@ -228,7 +227,7 @@ impl Marketplace {
             // if let Some(pub_key) = &existing_keys.as_ref().unwrap().get(&drop_id){
             //     self.keys_by_drop_id.insert(&drop_id, &Some(pub_key.to_vec()));
             // }
-            self.listed_keys_per_drop.insert(&drop_id, &None);
+            self.resales_per_drop.insert(&drop_id, &None);
         }
         
         // Calculate used storage and charge the user

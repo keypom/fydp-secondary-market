@@ -33,4 +33,9 @@ impl Marketplace{
         return event_details
     }
 
+    pub fn assert_event_active(&self, event_id: EventID){
+        require!(self.event_by_id.get(&event_id).is_some(), "No Event Found");
+        require!(self.event_by_id.get(&event_id).unwrap().status == Status::Active, "Event is not active");
+    }
+
 }

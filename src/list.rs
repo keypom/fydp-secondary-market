@@ -30,12 +30,19 @@ impl Marketplace {
         let initial_storage = env::storage_usage();
         near_sdk::log!("initial bytes {}", initial_storage);
 
+        // Ensure event with this ID does not already exist
+        require!(self.event_by_id.get(&event_id).is_none(), "Event ID already exists!");
+
+
         // If drop_ids provided, prices must be provided as well
         if drop_ids.is_some(){
             let received_drop_ids = drop_ids.as_ref().unwrap();
             let received_price_by_drop_id = price_by_drop_id.as_ref().unwrap();
             for drop_id in received_drop_ids{
                 require!(received_price_by_drop_id.contains_key(drop_id), "Price not provided for all drops!");
+                // Ensure drops do not exist on the contract already
+                require!(self.approved_drops.get(drop_id).is_none(), "Drop ID already exists on the contract!");
+                require!(self.event_by_drop_id.get(drop_id).is_none(), "Drop ID already associated with an event!");
             }
         }
 
@@ -133,7 +140,10 @@ impl Marketplace {
                     price: final_price,
                     public_key: key.public_key.clone(),
                     approval_id: Some(approval_id),
+                    event_id: event_id.clone(),
                 };
+
+
 
                 // Resale per PK
                 self.resale_info_per_pk.insert(&key.public_key, &resale_info);
@@ -206,6 +216,10 @@ impl Marketplace {
         let initial_storage = env::storage_usage();
         require!(self.event_by_id.get(&event_id).is_some(), "Event not found!");
         
+        // Ensure that all drops being added are not already associated with an event
+        for drop in added_drops.keys(){
+            require!(self.event_by_drop_id.get(drop).is_none(), "Drop already associated with an event!");
+        }
 
         // Update event details
         let mut event = self.event_by_id.get(&event_id).expect("No Event Found");

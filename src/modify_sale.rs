@@ -1,5 +1,7 @@
 use std::ops::Index;
 
+use borsh::de;
+
 use crate::*;
 
 // 0.1 $NEAR
@@ -8,71 +10,12 @@ pub const SPUTNIK_PROPOSAL_DEPOSIT: Balance = 100000000000000000000000;
 // Implement the contract structure
 #[near_bindgen]
 impl Marketplace {
-
-    #[payable]
-    pub fn modify_event_details(
-        &mut self,
-        event_id: EventID,
-        new_name: Option<String>,
-        new_host: Option<AccountId>,
-        new_description: Option<String>,
-    ){
-        self.assert_no_global_freeze();
-        let initial_storage = env::storage_usage();
-        near_sdk::log!("initial bytes {}", initial_storage);
-
-        require!(self.event_by_id.get(&event_id).is_some(), "No Event Found");
-        require!(self.event_by_id.get(&event_id).unwrap().host == env::predecessor_account_id(), "Must be event host to modify event details!");
-        let mut event_details = self.event_by_id.get(&event_id).expect("No Event Found");
-        event_details.name = new_name;
-        if new_host.is_some(){
-            event_details.host = new_host.unwrap();
-        }
-        event_details.description = new_description;
-        self.event_by_id.insert(&event_id, &event_details);
-
-        let final_storage = env::storage_usage();
-        self.charge_storage(initial_storage, final_storage);
-
+    
+    // Modify a Key's Resale Price
+    pub fn change_resale_price(&mut self, public_key: PublicKey, new_resale_price: U128){
+        // TODO: IMPLEMENT
     }
 
-    #[payable]
-    // IGNORING STORAGE
-    pub fn modify_sale_prices(
-        &mut self,
-        event_id: EventID,
-        new_price_by_drop_id: Option<HashMap<DropId, U128>>,
-    ){
-        self.assert_no_global_freeze();
-        let initial_storage = env::storage_usage();
-        near_sdk::log!("initial bytes {}", initial_storage);
-
-        require!(self.event_by_id.get(&event_id).is_some(), "No Event Found");
-        require!(self.event_by_id.get(&event_id).unwrap().host == env::predecessor_account_id(), "Must be event host to modify event details!");
-
-        let mut event = self.event_by_id.get(&event_id).expect("No Event Found");
-        event.price_by_drop_id = new_price_by_drop_id.unwrap();
-        self.event_by_id.insert(&event_id, &event);
-
-        let final_storage = env::storage_usage();
-        self.charge_storage(initial_storage, final_storage);
-    }
-    
-    /// Modify a Drop's Resale Conditions
-    #[payable]
-    pub fn modify_drop_resale_markup(
-        &mut self,
-        event_id: EventID,
-        new_markup: u64
-    ){
-        require!(env::predecessor_account_id() == self.event_by_id.get(&event_id).unwrap().host, "Must be event host to modify event details!");
-        let mut event = self.event_by_id.get(&event_id).expect("No Event Found");
-        event.max_markup = new_markup;
-        self.event_by_id.insert(&event_id, &event);
-    }
-    
-    // Modify a Key's Resale Conditions
-    
     // Rovoke a Resale - only key owner can do this
     pub fn revoke_resale(
         &mut self,
@@ -82,7 +25,7 @@ impl Marketplace {
         let initial_storage = env::storage_usage();
         near_sdk::log!("initial bytes {}", initial_storage);
 
-        // Make sure Key exists on contract
+        // Make sure ticket resale exists on contract
         require!(self.resale_info_per_pk.get(&public_key).is_some(), "Key Resale does not exist!");
 
         // Get key's drop ID and then event, in order to modify all needed data
@@ -107,6 +50,7 @@ impl Marketplace {
             
             if let Ok(key_info) = near_sdk::serde_json::from_slice::<Result<ExtKeyInfo, String>>(&val) {
                 // Predecessor must either own the key, or sign the txn using the key!
+                // REVOKE RESALE METHOD MUST BE ALLOWED ON EACH KEY
                 require!(predecessor == key_info.as_ref().unwrap().owner_id.clone()
                 || env::signer_account_pk() == public_key, "Must own or use the access key being de-list!");
                 let drop_id = &key_info.unwrap().drop_id;
@@ -129,13 +73,9 @@ impl Marketplace {
                 }
 
                 let final_storage = env::storage_usage();
-                let storage_freed = final_storage - initial_storage;
-                let refund_amount = storage_freed as u128 * env::storage_byte_cost();
-
-                Promise::new(predecessor).transfer(refund_amount).as_return();
-
+                self.charge_storage(initial_storage, final_storage);
             } else {
-             env::panic_str("ERR_WRONG_VAL_RECEIVED");
+             env::panic_str("Could not parse Key Information from Keypom Contract!");
             }      
         }
         else{

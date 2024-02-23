@@ -111,13 +111,17 @@ impl Marketplace {
     #[payable]
     pub fn buy_resale(
         &mut self,
-        public_key: PublicKey,
+        nft_transfer_memo: String,
         new_owner: Option<AccountId>,
-        new_public_key: PublicKey,
     ) {
         self.assert_no_global_freeze();
         let initial_storage = env::storage_usage();
         near_sdk::log!("initial bytes {}", initial_storage);
+
+        // Parse msg to get transfer information
+        let memo: NftTransferMemo = near_sdk::serde_json::from_str(&nft_transfer_memo).expect("Could not parse nft_transfer_memo to get nft transfer memo"); 
+        let public_key = memo.linkdrop_pk.clone();
+        let new_public_key = memo.new_public_key.clone();
 
         // Verify Sale - price wise, was attached deposit enough?
         let received_deposit = env::attached_deposit();
@@ -135,7 +139,7 @@ impl Marketplace {
                        .get_key_information(pk_string)
                        .then(
                             Self::ext(env::current_account_id())
-                            .buy_resale_middle_callback(public_key, initial_storage, env::predecessor_account_id(), new_owner, new_public_key, approval_id)
+                            .buy_resale_middle_callback(public_key, initial_storage, env::predecessor_account_id(), new_owner, approval_id, memo)
                         );
         
     }
@@ -147,14 +151,13 @@ impl Marketplace {
         initial_storage: u64,
         predecessor: AccountId,
         new_owner: Option<AccountId>,
-        new_public_key: PublicKey,
-        approval_id: Option<u64>
+        approval_id: Option<u64>,
+        memo: NftTransferMemo
     ){
          // Parse Response and Check if Fractal is in owned tokens
          if let PromiseResult::Successful(val) = env::promise_result(0) {
             
             if let Ok(key_info) = near_sdk::serde_json::from_slice::<ExtKeyInfo>(&val) {
-                let token_id = &key_info.token_id;
                 let drop_id = &key_info.drop_id;
                 let old_owner = &key_info.owner_id;
 
@@ -164,7 +167,7 @@ impl Marketplace {
                 }
 
                 ext_keypom::ext(AccountId::try_from(self.keypom_contract.to_string()).unwrap())
-                       .nft_transfer(Some(token_id.clone()), new_owner.clone(), approval_id, new_public_key)
+                       .nft_transfer(new_owner.clone(), approval_id, serde_json::to_string(&memo).unwrap())
                        .then(
                             Self::ext(env::current_account_id())
                             .buy_resale_callback(initial_storage, predecessor, public_key, drop_id.to_string(), old_owner.clone(), new_owner)

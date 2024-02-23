@@ -53,6 +53,8 @@ pub struct Marketplace {
     pub contract_owner_id: AccountId,
     /// Whether or not the contract is frozen and no new drops can be created / keys added.
     pub global_freeze: bool,
+    /// Maximum markup price, used to calculate resale ceiling upon event creation, in percentage (200 = 2x markup, 100 = 1x markup, etc.)
+    pub max_markup: u64,
     
     /// **************** Keypom ****************
     pub keypom_contract: AccountId,
@@ -67,6 +69,7 @@ pub struct Marketplace {
     // TODO: STORE KEY PASSWORD SOMEWHERE? HOW DOES FRONTEND KNOW WHAT PASSWORD TO PASS IN?
 
     // **************** By Account ****************
+    // Keys owned by each account, for the purpose of displaying owned tickets
     pub owned_keys_per_account: LookupMap<AccountId, Option<Vec<PublicKey>>>,
 
     // **************** By Drop ****************
@@ -88,6 +91,7 @@ impl Default for Marketplace{
             /// **************** Admin Stuff ****************
             contract_owner_id: AccountId::try_from("minqi.testnet".to_string()).unwrap(),
             global_freeze: false,
+            max_markup: 150, // 1.5x markup
             /// **************** Keypom ****************
             keypom_contract: AccountId::try_from("testing-nearcon-keypom.testnet".to_string()).unwrap(),
             // **************** By Event ID ****************
@@ -119,6 +123,7 @@ impl Marketplace {
              /// **************** Admin Stuff ****************
              contract_owner_id: AccountId::try_from(contract_owner.to_string()).unwrap(),
              global_freeze: false,
+             max_markup: 150, // 1.5x markup
              /// **************** Keypom ****************
              keypom_contract: AccountId::try_from(keypom_contract.to_string()).unwrap(),
              // **************** By Event ID ****************

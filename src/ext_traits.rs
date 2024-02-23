@@ -14,8 +14,8 @@ trait ExtKeypom{
 
     fn nft_token(&self, token_id: TokenId) -> Option<ExtNFTKey>;
 
-    fn nft_transfer(&mut self, token_id: Option<TokenId>, receiver_id: Option<AccountId>, approval_id: Option<u64>, memo: PublicKey);
-
+    // memo contains NftTrasnferMemo
+    fn nft_transfer(&mut self, receiver_id: Option<AccountId>, approval_id: Option<u64>, memo: String);
 }
 
 // #[ext_contract(ext_self)]

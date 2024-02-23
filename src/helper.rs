@@ -9,10 +9,9 @@ impl Marketplace{
         description: Option<String>,
         date: Option<String>,
         host: Option<AccountId>,
-        max_markup: u64,
-        max_tickets: Option<HashMap<DropId, Option<u64>>>,
-        drop_ids: Option<Vec<DropId>>,
-        price_by_drop_id: Option<HashMap<DropId, U128>>,
+        drop_ids: Vec<DropId>,
+        max_tickets: HashMap<DropId, Option<u64>>,
+        price_by_drop_id: HashMap<DropId, U128>,
     ) -> EventDetails{
 
         require!(self.event_by_id.get(&event_id).is_none(), "Event ID already exists!");
@@ -24,18 +23,23 @@ impl Marketplace{
             status: Status::Active,
             description,
             date,
-            max_markup,
-            max_tickets: max_tickets.unwrap_or(HashMap::new()),
-            drop_ids: drop_ids.unwrap_or(Vec::new()),
-            price_by_drop_id: price_by_drop_id.unwrap_or(HashMap::new())
-
+            max_tickets,
+            drop_ids,
+            price_by_drop_id
         };
-        return event_details
+        event_details
     }
 
-    pub fn assert_event_active(&self, event_id: EventID){
+    pub(crate) fn assert_event_active(&self, event_id: EventID){
         require!(self.event_by_id.get(&event_id).is_some(), "No Event Found");
         require!(self.event_by_id.get(&event_id).unwrap().status == Status::Active, "Event is not active");
+    }
+
+    pub(crate) fn drop_id_from_token_id(token_id: &TokenId) -> DropId{
+        let delimiter = ":";
+        let split: Vec<&str> = token_id.split(delimiter).collect();
+        let drop_id = split[0];
+        drop_id.to_string()
     }
 
 }

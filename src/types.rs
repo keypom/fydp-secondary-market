@@ -44,8 +44,6 @@ pub struct EventDetails {
     pub description: Option<String>,
     // Date
     pub date: Option<String>,
-    // Maximum markup, as a %
-    pub max_markup: u64,
     // Maximum number of tickets
     pub max_tickets: HashMap<DropId, Option<u64>>,
     // Associated Drop IDs
@@ -53,6 +51,20 @@ pub struct EventDetails {
     pub drop_ids: Vec<DropId>,
     // Tiered Pricing
     pub price_by_drop_id: HashMap<DropId, U128>,
+}
+#[derive(BorshDeserialize, BorshSerialize, Serialize, Deserialize, Clone)]
+#[serde(crate = "near_sdk::serde")]
+pub struct ReceivedResaleInfo {
+    pub price: U128,
+    pub public_key: PublicKey,
+}
+
+#[derive(BorshDeserialize, BorshSerialize, Serialize, Deserialize, Clone)]
+#[serde(crate = "near_sdk::serde")]
+pub struct NftTransferMemo {
+    pub linkdrop_pk: PublicKey,
+    pub signature: Base64VecU8,
+    pub new_public_key: PublicKey,
 }
 
 #[derive(BorshDeserialize, BorshSerialize, Serialize, Deserialize, Clone)]

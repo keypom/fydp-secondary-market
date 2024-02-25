@@ -1,3 +1,4 @@
+use core::panic;
 use std::string;
 
 use near_sdk::store::key;
@@ -118,12 +119,15 @@ impl Marketplace {
             // expected result: Result<ExtKeyInfo, String>
             
             if let Ok(result) = near_sdk::serde_json::from_slice::<bool>(&val) {
-                // // Add key to owned keys
-                let mut keys_for_owner = self.owned_keys_per_account.get(&predecessor);
-                let resale_from_drop_vec = keys_for_owner.get_or_insert_with(|| Some(Vec::new()));
-                resale_from_drop_vec.as_mut().unwrap().extend(public_keys.clone());
-                
-                self.charge_storage(initial_storage, env::storage_usage(), return_amount as u64)
+                if result{
+                    // Add key to owned keys
+                    let mut keys_for_owner = self.owned_keys_per_account.get(&predecessor);
+                    let keys_for_owner_vec = keys_for_owner.get_or_insert_with(|| Some(Vec::new()));
+                    keys_for_owner_vec.as_mut().unwrap().extend(public_keys.clone());
+                    self.charge_storage(initial_storage, env::storage_usage(), return_amount as u64)
+                }else{
+                    env::panic_str("Add Key Failed on Keypom Contract")
+                }
                 
             }else {
              env::panic_str("Could not parse add key bool response from Keypom contract");
@@ -155,6 +159,8 @@ impl Marketplace {
         let resale_info =  self.resale_info_per_pk.get(&public_key).expect("No resale for found this private key");
         let price = resale_info.price;
         require!(received_deposit.gt(&u128::from(price.clone())), "Not enough attached deposit to resale ticket!");
+        let return_amount = received_deposit - u128::from(price.clone());
+        
         require!(new_public_key != public_key, "New and old key cannot be the same");
 
         let approval_id = resale_info.approval_id;
@@ -166,7 +172,7 @@ impl Marketplace {
                        .get_key_information(pk_string)
                        .then(
                             Self::ext(env::current_account_id())
-                            .buy_resale_middle_callback(public_key, initial_storage, env::predecessor_account_id(), new_owner, approval_id, memo)
+                            .buy_resale_middle_callback(public_key, initial_storage, new_owner, approval_id, memo, return_amount)
                         );
         
     }
@@ -176,15 +182,16 @@ impl Marketplace {
         &mut self,
         public_key: PublicKey,
         initial_storage: u64,
-        predecessor: AccountId,
         new_owner: Option<AccountId>,
         approval_id: Option<u64>,
-        memo: NftTransferMemo
+        memo: NftTransferMemo,
+        return_amount: u128
     ){
          // Parse Response and Check if Fractal is in owned tokens
          if let PromiseResult::Successful(val) = env::promise_result(0) {
             
             if let Ok(key_info) = near_sdk::serde_json::from_slice::<ExtKeyInfo>(&val) {
+                // Key <-> Drop mapping not stored on marketplace, need to get from Keypom
                 let drop_id = &key_info.drop_id;
                 let old_owner = &key_info.owner_id;
 
@@ -197,7 +204,7 @@ impl Marketplace {
                        .nft_transfer(new_owner.clone(), approval_id, serde_json::to_string(&memo).unwrap())
                        .then(
                             Self::ext(env::current_account_id())
-                            .buy_resale_callback(initial_storage, predecessor, public_key, drop_id.to_string(), old_owner.clone(), new_owner)
+                            .buy_resale_callback(initial_storage, public_key, drop_id.to_string(), old_owner.clone(), new_owner, return_amount)
                         );
 
             } else {
@@ -213,16 +220,16 @@ impl Marketplace {
     pub fn buy_resale_callback(
         &mut self,
         initial_storage: u64, 
-        predecessor: AccountId,
         public_key: PublicKey,
         drop_id: DropId,
         old_owner: AccountId,
-        new_owner: Option<AccountId>
-    ) {
+        new_owner: Option<AccountId>,
+        return_amount: u128
+    ) -> Promise {
 
         // Parse Response and Update Contract Data Structures
         // TODO: MAKE SURE ALL DATA STRUCTURES ARE UPDATED HERE
-        if let PromiseResult::Successful(val) = env::promise_result(0) {
+        if let PromiseResult::Successful(_) = env::promise_result(0) {
             near_sdk::log!("made it into resale callback");
             
             // remove ticket from resell market
@@ -242,22 +249,14 @@ impl Marketplace {
             // Add key to new owner's owned keys
             if new_owner.is_some(){
                 let unwrapped_new_owner = new_owner.unwrap();
-                if self.owned_keys_per_account.contains_key(&unwrapped_new_owner){
-                    if self.owned_keys_per_account.get(&unwrapped_new_owner).is_none(){
-                        // No existing vector
-                        let mut keys_vec: Vec<PublicKey> = Vec::new();
-                        keys_vec.push(public_key.clone());
-                        self.owned_keys_per_account.insert(&unwrapped_new_owner, &Some(keys_vec));
-                    }else{
-                        self.owned_keys_per_account.get(&unwrapped_new_owner).unwrap().unwrap().push(public_key.clone());
-                    }
-                }
+                // Add key to owned keys
+                let mut keys_for_owner = self.owned_keys_per_account.get(&unwrapped_new_owner);
+                let keys_for_owner_vec = keys_for_owner.get_or_insert_with(|| Some(Vec::new()));
+                keys_for_owner_vec.as_mut().unwrap().push(public_key.clone());
             }
 
             let final_storage = env::storage_usage();
-            let storage_freed = final_storage - initial_storage;
-            let refund_amount = storage_freed as u128 * env::storage_byte_cost();
-            Promise::new(predecessor).transfer(refund_amount).as_return();   
+            self.charge_storage(initial_storage, final_storage, return_amount as u64)
         }
         else{
             env::panic_str("NFT Transfer Failed!")

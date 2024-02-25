@@ -1,5 +1,3 @@
-use std::ops::Index;
-
 use borsh::de;
 
 use crate::*;
@@ -19,12 +17,12 @@ impl Marketplace {
         near_sdk::log!("initial bytes {}", initial_storage);
 
         // Ensure correct perms
-        require!(self.event_by_id.get(&event_id).is_some(), "No Event Found");
+        require!(self.event_by_id.contains_key(&event_id), "No Event Found"); 
         require!(self.event_by_id.get(&event_id).unwrap().host == env::predecessor_account_id(), "Must be event host to modify event details!");
 
-        let mut event = self.event_by_id.get(&event_id).expect("No Event Found");
-        event.status = Status::Inactive;
-        self.event_by_id.insert(&event_id, &event);
+        self.event_by_id.get_mut(&event_id).map(|event| {
+            event.status = Status::Inactive;
+        });
 
         let final_storage = env::storage_usage();
         self.charge_storage(initial_storage, final_storage);
@@ -39,9 +37,9 @@ impl Marketplace {
         // Ensure correct perms
         require!(self.event_by_id.get(&event_id).unwrap().host == env::predecessor_account_id(), "Must be event host to modify event details!");
 
-        let mut event = self.event_by_id.get(&event_id).expect("No Event Found");
-        event.status = Status::Active;
-        self.event_by_id.insert(&event_id, &event);
+        self.event_by_id.get_mut(&event_id).map(|event| {
+            event.status = Status::Active;
+        });
 
         let final_storage = env::storage_usage();
         self.charge_storage(initial_storage, final_storage);
@@ -58,19 +56,17 @@ impl Marketplace {
         self.assert_no_global_freeze();
         let initial_storage = env::storage_usage();
         near_sdk::log!("initial bytes {}", initial_storage);
+        self.assert_event_active(event_id);
 
         // Ensure correct perms
         require!(self.event_by_id.get(&event_id).is_some(), "No Event Found");
         require!(self.event_by_id.get(&event_id).unwrap().host == env::predecessor_account_id(), "Must be event host to modify event details!");
-        
-        // if element is provided, then update it
-        let mut event_details = self.event_by_id.get(&event_id).expect("No Event Found");
-        event_details.host = new_host.unwrap_or(event_details.host);
-        if let Some(name) = new_name { event_details.name = Some(name); }
-        if let Some(description) = new_description { event_details.description = Some(description); }
 
-        // reinsert event details
-        self.event_by_id.insert(&event_id, &event_details);
+        self.event_by_id.get_mut(&event_id).map(|event| {
+            event.host = new_host.unwrap_or(event.host);
+            event.name = new_name.unwrap_or(event.name);
+            event.description = new_description.unwrap_or(event.description);
+        });
 
         // charge storage
         let final_storage = env::storage_usage();
@@ -88,6 +84,7 @@ impl Marketplace {
         self.assert_no_global_freeze();
         let initial_storage = env::storage_usage();
         near_sdk::log!("initial bytes {}", initial_storage);
+        self.assert_event_active(event_id);
 
         // Ensure correct perms
         require!(self.event_by_id.get(&event_id).is_some(), "No Event Found");
@@ -115,6 +112,7 @@ impl Marketplace {
         self.assert_no_global_freeze();
         let initial_storage = env::storage_usage();
         near_sdk::log!("initial bytes {}", initial_storage);
+        self.assert_event_active(event_id);
 
         // Ensure correct perms
         require!(self.event_by_id.get(&event_id).is_some(), "No Event Found");

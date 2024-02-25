@@ -24,4 +24,11 @@ impl Marketplace {
             "Only the contract owner can call this function"
         );
     }
+
+    // Update marketplace max markup
+    #[private]
+    pub fn change_max_markup(&mut self, new_markup: u64){
+        self.assert_owner();
+        self.max_markup = new_markup;
+    }
 }

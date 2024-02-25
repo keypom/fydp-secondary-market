@@ -89,11 +89,10 @@ impl Marketplace {
         // Require the key to be associated with an event                
         let drop_id = self.drop_id_from_token_id(&token_id);
         let event_id = self.event_by_drop_id.get(&drop_id).expect("Key not associated with any event, cannot list!");
-        let event = self.event_by_id.get(&event_id).expect("No event found for Event ID");
 
         // ~~~~~~~~~~~~~~ BEGIN LISTING PROCESS ~~~~~~~~~~~~~~
         // Clamp price and create resale info object
-        let final_price = self.clamp_price(price, drop_id.clone(), event.clone());
+        let final_price = self.clamp_price(price, drop_id.clone());
         let resale_info: StoredResaleInformation = StoredResaleInformation{
             price: final_price,
             public_key: key.clone(),

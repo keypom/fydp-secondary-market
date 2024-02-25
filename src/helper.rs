@@ -42,9 +42,14 @@ impl Marketplace{
         drop_id.to_string()
     }
 
-    pub(crate) fn clamp_price(&self, current_price: U128, drop_id: DropId, event: EventDetails) -> U128{
-        let final_price = current_price;
+    pub(crate) fn clamp_price(&self, current_price: U128, drop_id: DropId) -> U128{
+        // Get event and base price
+        let event_id = self.event_by_drop_id.get(&drop_id).expect("No event found for drop, cannot set max price");
+        let event = self.event_by_id.get(&event_id).expect("No event found for event ID, cannot set max price");
         let base_price = event.price_by_drop_id.get(&drop_id).expect("No base price found for drop, cannot set max price");
+        
+        // Clamp price
+        let final_price = current_price;
         let max_price = u128::from(base_price.clone()) * self.max_markup as u128;
         if u128::from(current_price).gt(&max_price){
             // price is too high, clamp it to max

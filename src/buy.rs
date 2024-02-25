@@ -15,9 +15,8 @@ impl Marketplace {
     pub fn buy_initial_sale(
         &mut self,
         event_id: EventID,
-        new_key_info: ExtKeyData,
-        // By default, ticket tier is sorted low to high. Tier 1 is lowest, tier 6 is higher etc.
-        ticket_tier: u64,
+        drop_id: DropId,
+        new_keys: Vec<ExtKeyData>,
         new_owner: Option<AccountId>
     ) {
         self.assert_no_global_freeze();
@@ -26,39 +25,83 @@ impl Marketplace {
 
         // Ensure valid new key owner
         if new_owner.is_some(){
-            require!(new_owner.clone().unwrap() != self.keypom_contract, "New owner cannot be Keypom");
             require!(new_owner.clone().unwrap() != env::current_account_id(), "New owner cannot be marketplace");
         }
 
-        // Get ticket tier
-        let received_deposit = env::attached_deposit();
-        let tiered_drops = self.get_tiered_drop_list_for_event(event_id.clone(), None);
-        let tier: usize = ticket_tier as usize - 1 as usize;
-        require!(tier < tiered_drops.len(), "Desired Tier not in valid");
-        
-        // Get ticket price, and evaluate if attached deposit is sufficient
-        let desired_drop = tiered_drops.get(tier).unwrap();
-        let binding = self.event_by_id.get(&event_id);
-        let price = binding.as_ref().unwrap().price_by_drop_id.get(&desired_drop.to_string()).unwrap();
-        require!(received_deposit.gt(&u128::from(price.clone())), "Not enough attached deposit to purchase ticket!");
+        // Ensure event is active
+        self.assert_event_active(event_id.clone());
 
-        require!(self.approved_drops.contains(&desired_drop.to_string()), "No drop found");
-        near_sdk::log!("Trying to purchase key on drop ID {} at price of {}", desired_drop, u128::from(price.clone()));
+        // Ensure enough attached deposit
+        let received_deposit = env::attached_deposit();
+        let binding = self.event_by_id.get(&event_id);
+        let single_ticket_price = binding.as_ref().unwrap().price_by_drop_id.get(&drop_id.to_string()).unwrap();
+        let total_price = u128::from(single_ticket_price.clone()) * new_keys.len() as u128;
+        require!(received_deposit.gt(&u128::from(total_price.clone())), "Not enough attached deposit to purchase ticket!");
+        let return_amount = received_deposit - total_price;
+
+        // Get Maximum number of tickets
+        let event = self.event_by_id.get(&event_id).unwrap();
+        let max_tickets = event.max_tickets.get(&drop_id.to_string()).unwrap();
+
+        require!(self.approved_drops.contains(&drop_id.to_string()), "No drop found");
+        near_sdk::log!("Trying to purchase {} Tickets on drop ID {} at price of {} per Ticket", new_keys.len(), drop_id, u128::from(single_ticket_price.clone()));
         near_sdk::log!("Received paymnet: {}", received_deposit);
+
+        let public_keys = new_keys.iter().map(|x| x.public_key.clone()).collect::<Vec<PublicKey>>();
         
-        // Add key to keypom contract
-        let mut keys_vec: Vec<ExtKeyData> = Vec::new();
-        let public_key = new_key_info.public_key.clone();
-        // TODO: ADD PASSWORD LOGIC HERE
-        keys_vec.push(ExtKeyData{public_key: public_key.clone(), key_owner: new_owner.clone(), password_by_use: None, metadata: None});
-        // Get key's drop ID and then event, in order to modify all needed data
-        ext_keypom::ext(AccountId::try_from(self.keypom_contract.to_string()).unwrap())
-                       .add_keys(desired_drop.to_string(), keys_vec, None)
-                       .then(
-                            Self::ext(env::current_account_id())
-                            .buy_initial_sale_callback(initial_storage, env::predecessor_account_id(), public_key)
-                        );
+        // Ticket limit exists, check
+        if max_tickets.is_some(){
+            ext_keypom::ext(AccountId::try_from(self.keypom_contract.to_string()).unwrap())
+            .get_drop_information(drop_id.to_string())
+            .then(
+                Self::ext(env::current_account_id())
+                .add_key_pre_check(drop_id.to_string(), new_keys, max_tickets.unwrap(), initial_storage, env::predecessor_account_id(), public_keys, return_amount)
+            );
+        }else{
+            // Get key's drop ID and then event, in order to modify all needed data
+            ext_keypom::ext(AccountId::try_from(self.keypom_contract.to_string()).unwrap())
+            .add_keys(drop_id.to_string(), new_keys, None)
+            .then(
+                 Self::ext(env::current_account_id())
+                 .buy_initial_sale_callback(initial_storage, env::predecessor_account_id(), public_keys, return_amount)
+             );
+        }
         
+    }
+
+    // Ensure max tickets not yet reached
+    #[private]
+    pub fn add_key_pre_check(
+        &mut self,
+        drop_id: DropId,
+        keys_vec: Vec<ExtKeyData>,
+        max_tickets: u64,
+        initial_storage: u64, 
+        predecessor: AccountId,
+        public_keys: Vec<PublicKey>,
+        return_amount: u128
+    ){
+        // Parse Response and Check if more tickets can still be sold
+        if let PromiseResult::Successful(val) = env::promise_result(0){
+            if let Ok(drop_info) = near_sdk::serde_json::from_slice::<ExtDrop>(&val) {
+                let current_tickets = drop_info.next_key_id + 1;
+                require!(max_tickets - current_tickets < public_keys.len() as u64, "Max tickets for this drop already reached!");
+
+                // Get key's drop ID and then event, in order to modify all needed data
+                ext_keypom::ext(AccountId::try_from(self.keypom_contract.to_string()).unwrap())
+                .add_keys(drop_id.to_string(), keys_vec, None)
+                .then(
+                     Self::ext(env::current_account_id())
+                     .buy_initial_sale_callback(initial_storage, predecessor, public_keys, return_amount)
+                 );
+
+            } else {
+                env::panic_str("Could not parse drop information from Keypom Contract");
+            }
+        }
+        else{
+            env::panic_str("Could not retrieve drop infromation from Keypom Contract!")
+        }
     }
 
     #[private]
@@ -66,39 +109,28 @@ impl Marketplace {
         &mut self,
         initial_storage: u64, 
         predecessor: AccountId,
-        public_key: PublicKey) -> bool {
+        public_keys: Vec<PublicKey>,
+        return_amount: u128
+    ) -> Promise {
 
-             // Parse Response and Check if Fractal is in owned tokens
+        // Get key information and add to owned keys
         if let PromiseResult::Successful(val) = env::promise_result(0) {
             // expected result: Result<ExtKeyInfo, String>
             
             if let Ok(result) = near_sdk::serde_json::from_slice::<bool>(&val) {
-                // Add key to owned keys
-                if self.owned_keys_per_account.contains_key(&predecessor){
-                    if self.owned_keys_per_account.get(&predecessor).is_none(){
-                        // No existing vector
-                        let mut keys_vec: Vec<PublicKey> = Vec::new();
-                        keys_vec.push(public_key.clone());
-                        self.owned_keys_per_account.insert(&predecessor, &Some(keys_vec));
-                    }else{
-                        self.owned_keys_per_account.get(&predecessor).unwrap().unwrap().push(public_key.clone());
-                    }
-                }else{
-                   // Create new drop <-> vector pairing
-                   let mut keys_vec: Vec<PublicKey> = Vec::new();
-                   keys_vec.push(public_key.clone());
-                   self.owned_keys_per_account.insert(&predecessor, &Some(keys_vec));
-                }
+                // // Add key to owned keys
+                let mut keys_for_owner = self.owned_keys_per_account.get(&predecessor);
+                let resale_from_drop_vec = keys_for_owner.get_or_insert_with(|| Some(Vec::new()));
+                resale_from_drop_vec.as_mut().unwrap().extend(public_keys.clone());
                 
                 let final_storage = env::storage_usage();
                 let storage_freed = final_storage - initial_storage;
                 let refund_amount = storage_freed as u128 * env::storage_byte_cost();
 
-                Promise::new(predecessor).transfer(refund_amount).as_return();
-                return result
+                
 
-            } else {
-
+                Promise::new(predecessor).transfer(refund_amount).as_return()
+            }else {
              env::panic_str("Could not parse add key bool response from Keypom contract");
             }      
         }
@@ -200,12 +232,6 @@ impl Marketplace {
             
             // remove ticket from resell market
             self.resale_info_per_pk.remove(&public_key);
-
-            // Remove ticket from event resales
-            let event_id = self.event_by_drop_id.get(&drop_id).unwrap();
-            let listed_resales_per_event: Vec<StoredResaleInformation> = self.resales_per_event.get(&event_id).as_ref().unwrap().as_ref().unwrap().to_vec();
-            let new_listed_event_resales: Vec<StoredResaleInformation> = listed_resales_per_event.iter().filter(|&x| x.public_key != public_key).cloned().collect();
-            self.resales_per_event.insert(&drop_id, &Some(new_listed_event_resales));
             
             // Remove ticket from drop resales
             let listed_resales: Vec<StoredResaleInformation> = self.resales_per_drop.get(&drop_id).as_ref().unwrap().as_ref().unwrap().to_vec();

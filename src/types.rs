@@ -77,6 +77,17 @@ pub struct AddedDropDetails {
     pub price_by_drop_id: U128,
 }
 
+#[derive(BorshDeserialize, BorshSerialize, Serialize, Deserialize, Clone)]
+#[serde(crate = "near_sdk::serde")]
+pub struct ExtDrop {
+    /// ID for this specific drop
+    pub drop_id: DropId,
+    /// Account ID who funded / owns the rights to this specific drop
+    pub funder_id: AccountId,
+
+    /// Keep track of the next nonce to give out to a key
+    pub next_key_id: u64,
+}
 
 #[derive(Serialize, Deserialize, Debug)]
 pub struct ExtKeyData {

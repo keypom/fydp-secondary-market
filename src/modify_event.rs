@@ -77,8 +77,9 @@ impl Marketplace {
         self.charge_storage(initial_storage, final_storage);
     }
 
-    #[payable]
     // Must update prices for all drops together, free drops should have price set to 0
+    // DOES NOT MODIFY PRICES OF EXISTING RESALES
+    #[payable]
     pub fn modify_sale_prices(
         &mut self,
         event_id: EventID,
@@ -104,13 +105,12 @@ impl Marketplace {
         let final_storage = env::storage_usage();
         self.charge_storage(initial_storage, final_storage);
     }
-    
-    /// Modify a Drop's Resale Conditions
-    #[payable]
-    pub fn modify_drop_resale_markup(
+
+    // Modify the maximum number of tickets that can be sold for each drop
+    pub fn modify_max_tickets(
         &mut self,
-        event_id: EventID,
-        new_markup: u64
+        event_id: EventId,
+        new_max_tickets_by_drop_id: HashMap<DropId, Option<u64>>
     ){
         self.assert_no_global_freeze();
         let initial_storage = env::storage_usage();
@@ -119,12 +119,19 @@ impl Marketplace {
         // Ensure correct perms
         require!(self.event_by_id.get(&event_id).is_some(), "No Event Found");
         require!(self.event_by_id.get(&event_id).unwrap().host == env::predecessor_account_id(), "Must be event host to modify event details!");
-
+        
+        // update max tckets, make sure new ticket number map covers all drops in event
         let mut event = self.event_by_id.get(&event_id).expect("No Event Found");
-        event.max_markup = new_markup;
+        require!(new_max_tickets_by_drop_id.len() == event.drop_ids.len(), "New Price Map must contain same number of drops!");
+        for drop_id in event.drop_ids.iter(){
+            require!(new_max_tickets_by_drop_id.contains_key(drop_id), "New Price Map must cover all drops in event!");
+        }
+
+        event.max_tickets_by_drop_id = new_max_tickets_by_drop_id;
         self.event_by_id.insert(&event_id, &event);
 
         let final_storage = env::storage_usage();
         self.charge_storage(initial_storage, final_storage);
+        
     }
 }

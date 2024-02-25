@@ -34,10 +34,8 @@ impl Marketplace {
         // Ensure drop IDs in max tickets and price_by_drop_id match
         require!(max_tickets.len() > 0 && price_by_drop_id.len() > 0, "No drops provided!");
         require!(max_tickets.len() == price_by_drop_id.len(), "Max Tickets and Prices must have same number of drops!");
-        let received_max_tickets = max_tickets.clone();
-        let received_price_by_drop_id = price_by_drop_id.clone();
-        for drop_id in received_max_tickets.keys(){
-            require!(received_price_by_drop_id.contains_key(drop_id), "Max Tickets and Prices must have the same drops!");
+        for drop_id in max_tickets.clone().keys(){
+            require!(price_by_drop_id.contains_key(drop_id), "Max Tickets and Prices must have the same drops!");
             drop_ids.push(drop_id.clone());
         }
 
@@ -53,7 +51,6 @@ impl Marketplace {
 
         // Insert by event ID stuff first
         self.event_by_id.insert(&final_event_details.event_id, &final_event_details);
-        self.resales_per_event.insert(&final_event_details.event_id, &None);
  
         // By Drop ID data structures
         let stored_drop_ids = final_event_details.drop_ids;
@@ -64,15 +61,12 @@ impl Marketplace {
         }
 
         // Calculate used storage and charge the user
-        let net_storage = env::storage_usage() - initial_storage;
-        let storage_cost = net_storage as Balance * env::storage_byte_cost();
-
-        self.charge_deposit(near_sdk::json_types::U128(storage_cost));
+        self.charge_storage(initial_storage, env::storage_usage(), 0);
 
         event_id
     }
 
-    // NFT Approve Callback, list the ticket
+    // Listing ticket through NFT Approve
     // TODO: CURRENTLY EATS UP ALL STORAGE, NEED TO RECONSIDER
     pub fn nft_on_approve(
         &mut self,
@@ -87,72 +81,36 @@ impl Marketplace {
         require!(env::predecessor_account_id() == self.keypom_contract, "nft_on_approve be called by Keypom contract using nft_approve!");
         require!(env::signer_account_id() == owner_id || env::signer_account_id() == self.keypom_contract, "Must be owner or Keypom contract to approve NFT");
 
-        // Parse msg to get price
+        // Parse msg to get price and public key
         let received_resale_info: ReceivedResaleInfo = near_sdk::serde_json::from_str(&msg).expect("Could not parse msg to get resale information");    
-
-        let drop_id = Marketplace::drop_id_from_token_id(&token_id);
         let price = received_resale_info.price;
         let key = received_resale_info.public_key;
-
+        
         // Require the key to be associated with an event                
+        let drop_id = self.drop_id_from_token_id(&token_id);
         let event_id = self.event_by_drop_id.get(&drop_id).expect("Key not associated with any event, cannot list!");
         let event = self.event_by_id.get(&event_id).expect("No event found for Event ID");
 
         // ~~~~~~~~~~~~~~ BEGIN LISTING PROCESS ~~~~~~~~~~~~~~
-        // Clamp price using max_markup
-        let mut final_price = price;
-        let base_price = event.price_by_drop_id.get(&drop_id).expect("No base price found for drop, cannot set max price");
-        let max_price = u128::from(base_price.clone()) * self.max_markup as u128;
-        if u128::from(price).gt(&max_price){
-            final_price = U128::from(max_price);
-        }
-        
-        // resale info object
+        // Clamp price and create resale info object
+        let final_price = self.clamp_price(price, drop_id.clone(), event.clone());
         let resale_info: StoredResaleInformation = StoredResaleInformation{
             price: final_price,
             public_key: key.clone(),
             approval_id: Some(approval_id),
             event_id: event_id.clone(),
+            drop_id: drop_id.clone(),
         };
 
         // Resale per PK
         self.resale_info_per_pk.insert(&key, &resale_info);
-        // updated listed resales per drop, if drop has no resales, add drop to this resaleInfo
-        if self.resales_per_drop.contains_key(&drop_id){
-            if self.resales_per_drop.get(&drop_id).as_ref().unwrap().is_none(){
-                // No existing vector
-                let mut resale_vec: Vec<StoredResaleInformation> = Vec::new();
-                resale_vec.push(resale_info.clone());
-                self.resales_per_drop.insert(&event_id, &Some(resale_vec));
-            }else{
-                self.resales_per_drop.get(&drop_id).unwrap().unwrap().push(resale_info.clone());
-            }
-        }else{
-            // Create new drop <-> vector pairing
-            let mut resale_vec: Vec<StoredResaleInformation> = Vec::new();
-            resale_vec.push(resale_info.clone());
-            self.resales_per_drop.insert(&drop_id, &Some(resale_vec));
-        }
 
-        // updated resales for event, if drop has no resales, add event to this resaleInfo
-        if self.resales_per_event.contains_key(&event_id){
-            if self.resales_per_event.get(&event_id).as_ref().unwrap().is_none(){
-                // No existing vector
-                let mut resale_vec: Vec<StoredResaleInformation> = Vec::new();
-                resale_vec.push(resale_info.clone());
-                self.resales_per_event.insert(&event_id, &Some(resale_vec));
-            }else{
-                // Existing vector
-                self.resales_per_event.get(&event_id).unwrap().unwrap().push(resale_info);
-            }
-        }else{
-           // Create new drop <-> vector pairing
-           let mut resale_vec: Vec<StoredResaleInformation> = Vec::new();
-           resale_vec.push(resale_info.clone());
-           self.resales_per_event.insert(&event_id, &Some(resale_vec));
-        }
+        // Update resales per drop
+        let mut resale_from_drop = self.resales_per_drop.get(&drop_id.clone());
+        let resale_from_drop_vec = resale_from_drop.get_or_insert_with(|| Some(Vec::new()));
+        resale_from_drop_vec.as_mut().unwrap().push(resale_info.clone());
 
-        
+        // ~~~~~~~~~~~~~~~~~~` STORAGE STUFF ~~~~~~~~~~~~~~~~~~`
         // Calculate used storage and charge the user
         // let net_storage = env::storage_usage() - initial_storage;
         // let storage_cost = net_storage as Balance * env::storage_byte_cost();

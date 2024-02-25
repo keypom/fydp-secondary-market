@@ -16,6 +16,8 @@ trait ExtKeypom{
 
     // memo contains NftTrasnferMemo
     fn nft_transfer(&mut self, receiver_id: Option<AccountId>, approval_id: Option<u64>, memo: String);
+
+    fn get_drop_information(&self, drop_id: DropId) -> ExtDrop;
 }
 
 // #[ext_contract(ext_self)]

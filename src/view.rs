@@ -24,7 +24,8 @@ pub struct StoredResaleInformation {
     pub price: U128,
     pub public_key: PublicKey,
     pub approval_id: Option<u64>,
-    pub event_id: EventID
+    pub event_id: EventID,
+    pub drop_id: DropId
 }
 
 #[near_bindgen]
@@ -87,44 +88,45 @@ impl Marketplace{
 
     // get all resales (ticket, price, approval ID) for an event, can be empty
     pub fn get_resales_per_event(&self, event_id: EventID) -> Option<Vec<StoredResaleInformation>> {
-        self.resales_per_event.get(&event_id).expect("No Resales for Event")
+        let drops = self.event_by_id.get(&event_id).expect("No Event Found for Event ID").drop_ids;
+        let mut all_resales: Vec<StoredResaleInformation> = Vec::new();
+        for drop in drops{
+            let resales = self.resales_per_drop.get(&drop).unwrap_or(Some(Vec::new()));
+            for resale in resales.unwrap_or(Vec::new()) {
+                all_resales.push(resale);
+            }
+        }
+        Some(all_resales)
     }
 
     // All resales on the contract, sorted by event
     pub fn get_all_resales(&self) -> Vec<Vec<ResaleInformation>> {
         let all_event_id = self.get_event_ids();
-        let all_events_copy = all_event_id.clone();
-        let mut event_name;
-        let mut host; 
-        let mut description; 
-        let mut date;
         let mut all_resales: Vec<Vec<ResaleInformation>> = Vec::new();
-        let mut index = 0;
         near_sdk::log!("all event id {:?}", all_event_id);
         for event_id in all_event_id {
             // Same for all keys in event
-            event_name = self.event_by_id.get(&event_id).unwrap().name.clone();
-            host = self.event_by_id.get(&event_id).unwrap().host.clone();
-            description = self.event_by_id.get(&event_id).unwrap().description.clone();
-            date = self.event_by_id.get(&event_id).unwrap().date.clone();
-
-            let resales = self.get_resales_per_event(event_id);
+            let event = self.event_by_id.get(&event_id.clone()).expect("Event details not found");
+            let drops = event.drop_ids;
             let mut event_resales = Vec::new();
-            for resale in resales.unwrap_or(Vec::new()) {
-                let resale_info = ResaleInformation{
-                    price: resale.price,
-                    public_key: resale.public_key,
-                    approval_id: resale.approval_id,
-                    event_id: all_events_copy.get(index).unwrap().clone(),
-                    event_name: event_name.clone(),
-                    host: host.clone(),
-                    description: description.clone(),
-                    date: date.clone()
-                };
-                event_resales.push(resale_info);
+
+            for drop in drops{
+                let resales = self.resales_per_drop.get(&drop).unwrap_or(Some(Vec::new()));
+                for resale in resales.unwrap_or(Vec::new()) {
+                    let resale_info = ResaleInformation{
+                        price: resale.price,
+                        public_key: resale.public_key,
+                        approval_id: resale.approval_id,
+                        event_id: event_id.clone(),
+                        event_name: event.name.clone(),
+                        host: event.host.clone(),
+                        description: event.description.clone(),
+                        date: event.date.clone()
+                    };
+                    event_resales.push(resale_info);
+                }
             }
             all_resales.push(event_resales);
-            index += 1;
         }
         all_resales
     }

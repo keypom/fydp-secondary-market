@@ -63,8 +63,6 @@ pub struct Marketplace {
     // **************** By Event ID ****************
     // Event/Drop Information per Drop
     pub event_by_id: UnorderedMap<EventID, EventDetails>,
-    // Key resales per event
-    pub resales_per_event: LookupMap<EventID, Option<Vec<StoredResaleInformation>>>,
 
     // TODO: STORE KEY PASSWORD SOMEWHERE? HOW DOES FRONTEND KNOW WHAT PASSWORD TO PASS IN?
 
@@ -96,7 +94,6 @@ impl Default for Marketplace{
             keypom_contract: AccountId::try_from("testing-nearcon-keypom.testnet".to_string()).unwrap(),
             // **************** By Event ID ****************
             event_by_id: UnorderedMap::new(StorageKeys::EventInfoPerDrop),
-            resales_per_event: LookupMap::new(StorageKeys::ResalePerEvent),
             // **************** By Account ****************
             owned_keys_per_account: LookupMap::new(StorageKeys::KeysForOwner),
             // **************** By Drop ****************
@@ -128,9 +125,8 @@ impl Marketplace {
              keypom_contract: AccountId::try_from(keypom_contract.to_string()).unwrap(),
              // **************** By Event ID ****************
              event_by_id: UnorderedMap::new(StorageKeys::EventInfoPerDrop),
-             resales_per_event: LookupMap::new(StorageKeys::ResalePerEvent),
              // **************** By Account ****************
-            owned_keys_per_account: LookupMap::new(StorageKeys::KeysForOwner),
+             owned_keys_per_account: LookupMap::new(StorageKeys::KeysForOwner),
              // **************** By Drop ****************
              approved_drops: HashSet::new(),
              event_by_drop_id: LookupMap::new(StorageKeys::EventByDropId),

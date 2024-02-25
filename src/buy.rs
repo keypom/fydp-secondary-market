@@ -123,13 +123,8 @@ impl Marketplace {
                 let resale_from_drop_vec = keys_for_owner.get_or_insert_with(|| Some(Vec::new()));
                 resale_from_drop_vec.as_mut().unwrap().extend(public_keys.clone());
                 
-                let final_storage = env::storage_usage();
-                let storage_freed = final_storage - initial_storage;
-                let refund_amount = storage_freed as u128 * env::storage_byte_cost();
-
+                self.charge_storage(initial_storage, env::storage_usage(), return_amount as u64)
                 
-
-                Promise::new(predecessor).transfer(refund_amount).as_return()
             }else {
              env::panic_str("Could not parse add key bool response from Keypom contract");
             }      

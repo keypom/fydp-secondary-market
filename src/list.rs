@@ -7,9 +7,9 @@ use crate::*;
 #[near_bindgen]
 impl Marketplace {
 
-    /// List an event, expected call after drop creation succeeds, assuming no keys in those drops
+    /// Create an event, expected call after drop creation succeeds, assuming no keys in those drops
     #[payable]
-    pub fn list_event(
+    pub fn create_event(
         &mut self,
         // Unique event identifier 
         event_id: EventID,
@@ -71,6 +71,62 @@ impl Marketplace {
         self.charge_storage(initial_storage, env::storage_usage(), 0);
 
         event_id
+    }
+
+    // TODO: Review
+    #[payable]
+    pub fn add_drops_to_event(
+        &mut self,
+        event_id: EventID,
+        drop_ids: Vec<DropId>,
+        max_tickets: HashMap<DropId, Option<u64>>,
+        price_by_drop_id: HashMap<DropId, U128>,
+    ){
+        self.assert_no_global_freeze();
+        let initial_storage = env::storage_usage();
+        near_sdk::log!("initial bytes {}", initial_storage);
+        self.assert_event_active(&event_id);
+
+        // Ensure correct perms
+        require!(self.event_by_id.get(&event_id).is_some(), "No Event Found");
+        require!(self.event_by_id.get(&event_id).unwrap().host == env::predecessor_account_id(), "Must be event host to modify event details!");
+
+        // Ensure drop IDs in max tickets and price_by_drop_id match
+        require!(max_tickets.len() == price_by_drop_id.len() && price_by_drop_id.len() == drop_ids.len(), "Drops, Max Tickets and Prices must have same number of drops!");
+        require!(max_tickets.len() > 0, "No drops provided!");
+        for drop_id in drop_ids.clone(){
+            require!(price_by_drop_id.contains_key(&drop_id), "Prices and Drops must have the same drops!");
+            require!(max_tickets.contains_key(&drop_id), "Max Tickets and Drops must have the same drops!");
+        }
+
+        // Ensure all drops are approved
+        for drop_id in drop_ids.iter(){
+            require!(self.approved_drops.contains(drop_id), "Drop not approved for use in marketplace!");
+        }
+
+        // Ensure all drops are not already in event
+        let event = self.event_by_id.get(&event_id).expect("No Event Found");
+        for drop_id in drop_ids.iter(){
+            require!(!event.drop_ids.contains(drop_id), "Drop already in event!");
+        }
+
+        // Update event details
+        let mut event = self.event_by_id.get(&event_id).expect("No Event Found");
+        event.drop_ids.extend(drop_ids.clone());
+        for drop_id in drop_ids.iter(){
+            event.max_tickets.insert(drop_id.clone(), max_tickets.get(drop_id).unwrap().clone());
+            event.price_by_drop_id.insert(drop_id.clone(), price_by_drop_id.get(drop_id).unwrap().clone());
+        }
+        self.event_by_id.insert(&event_id, &event);
+
+        // Update by drop ID data structures
+        for drop_id in drop_ids {
+            self.event_by_drop_id.insert(&drop_id, &event_id);
+            self.resales_per_drop.insert(&drop_id, &None);
+        }
+
+        let final_storage = env::storage_usage();
+        self.charge_storage(initial_storage, final_storage, 0);
     }
 
     // Listing ticket through NFT Approve

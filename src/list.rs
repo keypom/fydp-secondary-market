@@ -39,12 +39,12 @@ impl Marketplace {
             drop_ids.push(drop_id.clone());
         }
 
-        // Insert new strip ID, or ensure current one is valid
+        // Insert new stripe ID, or ensure current one is valid
         if stripe_id.is_some(){
-            if self.stripe_id_per_account.contains_key(&env::signer_account_id()){
-                require!(self.stripe_id_per_account.get(&env::signer_account_id()).unwrap() == stripe_id.unwrap(), "Stripe ID does not match existing Stripe ID for this account!");
+            if self.stripe_id_per_account.contains_key(&env::predecessor_account_id()){
+                require!(self.stripe_id_per_account.get(&env::predecessor_account_id()).unwrap() == stripe_id.unwrap(), "Stripe ID does not match existing Stripe ID for this account!");
             }else{
-                self.stripe_id_per_account.insert(&env::signer_account_id(), &stripe_id.unwrap());
+                self.stripe_id_per_account.insert(&env::predecessor_account_id(), &stripe_id.unwrap());
             }
         }
 
@@ -142,7 +142,6 @@ impl Marketplace {
         let initial_storage = env::storage_usage();
         near_sdk::log!("initial bytes {}", initial_storage);
         require!(env::predecessor_account_id() == self.keypom_contract, "nft_on_approve be called by Keypom contract using nft_approve!");
-        require!(env::signer_account_id() == owner_id || env::signer_account_id() == self.keypom_contract, "Must be owner or Keypom contract to approve NFT");
 
         // Parse msg to get price and public key
         let received_resale_info: ReceivedResaleInfo = near_sdk::serde_json::from_str(&msg).expect("Could not parse msg to get resale information");    
@@ -188,8 +187,8 @@ impl Marketplace {
     pub fn register_stripe_id(&mut self, stripe_id: String){
         self.assert_no_global_freeze();
         let initial_storage = env::storage_usage();
-        require!(!self.stripe_id_per_account.contains_key(&env::signer_account_id()), "Stripe ID already registered for this account!");
-        self.stripe_id_per_account.insert(&env::signer_account_id(), &stripe_id);
+        require!(!self.stripe_id_per_account.contains_key(&env::predecessor_account_id()), "Stripe ID already registered for this account!");
+        self.stripe_id_per_account.insert(&env::predecessor_account_id(), &stripe_id);
         self.charge_storage(initial_storage, env::storage_usage(), 0);
     }
 }

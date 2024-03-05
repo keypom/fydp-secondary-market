@@ -16,7 +16,7 @@ impl Marketplace{
 
         let event_details = EventDetails{
             name: event_name,
-            host: env::signer_account_id(),
+            host: env::predecessor_account_id(),
             event_id,
             status: Status::Active,
             resale_status: ResaleStatus::Active,

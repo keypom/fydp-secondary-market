@@ -26,6 +26,11 @@ pub struct StoredResaleInformation {
 
 #[near_bindgen]
 impl Marketplace{
+
+    // Return marketplace maximum markup
+    pub fn get_max_markup(&self) -> u64 {
+        self.max_markup
+    }
     
     // View calls -> all events/drops, filter by funder, get event info, get owner, keypom constract, resale price per pk, resales per event, etc.
     pub fn get_events_per_funder(&self, funder: AccountId, limit: Option<u64>, from_index: Option<u64>) -> Vec<EventDetails>{

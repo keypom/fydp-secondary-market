@@ -5,14 +5,14 @@ impl Marketplace {
     /// Set the contract to be frozen thus not allowing any drops to be created or keys added
    #[private]
     pub fn freeze_contract(&mut self) {
-        self.assert_owner();
+        //self.assert_owner();
         self.global_freeze = true
     }
     
     /// Set the contract to be unfrozen thus resuming the ability for drops and keys to be created
     #[private]
     pub fn unfreeze_contract(&mut self) {
-        self.assert_owner();
+        //self.assert_owner();
         self.global_freeze = false;
     }
     
@@ -28,7 +28,7 @@ impl Marketplace {
     // Update marketplace max markup
     #[private]
     pub fn change_max_markup(&mut self, new_markup: u64){
-        self.assert_owner();
+        //self.assert_owner();
         self.max_markup = new_markup;
     }
 }

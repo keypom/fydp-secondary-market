@@ -1,7 +1,7 @@
 use core::panic;
 use std::string;
 
-use near_sdk::store::key;
+use near_sdk::store::{key, vec};
 
 use crate::*;
 
@@ -30,7 +30,7 @@ impl Marketplace {
         }
 
         // Ensure event is active
-        self.assert_event_active(event_id.clone());
+        self.assert_event_active(&event_id);
 
         // Ensure enough attached deposit
         let received_deposit = env::attached_deposit();
@@ -56,7 +56,7 @@ impl Marketplace {
             .get_drop_information(drop_id.to_string())
             .then(
                 Self::ext(env::current_account_id())
-                .add_key_pre_check(drop_id.to_string(), new_keys, max_tickets.unwrap(), initial_storage, env::predecessor_account_id(), public_keys, return_amount)
+                .add_key_pre_check(drop_id.to_string(), new_keys, max_tickets.unwrap(), initial_storage, env::predecessor_account_id(), public_keys, return_amount, event_id.clone())
             );
         }else{
             // Get key's drop ID and then event, in order to modify all needed data
@@ -64,7 +64,7 @@ impl Marketplace {
             .add_keys(drop_id.to_string(), new_keys, None)
             .then(
                  Self::ext(env::current_account_id())
-                 .buy_initial_sale_callback(initial_storage, env::predecessor_account_id(), public_keys, return_amount)
+                 .buy_initial_sale_callback(initial_storage, env::predecessor_account_id(), public_keys, return_amount, event_id.clone())
              );
         }
         
@@ -80,7 +80,8 @@ impl Marketplace {
         initial_storage: u64, 
         predecessor: AccountId,
         public_keys: Vec<PublicKey>,
-        return_amount: u128
+        return_amount: u128,
+        event_id: EventID
     ){
         // Parse Response and Check if more tickets can still be sold
         if let PromiseResult::Successful(val) = env::promise_result(0){
@@ -93,7 +94,7 @@ impl Marketplace {
                 .add_keys(drop_id.to_string(), keys_vec, None)
                 .then(
                      Self::ext(env::current_account_id())
-                     .buy_initial_sale_callback(initial_storage, predecessor, public_keys, return_amount)
+                     .buy_initial_sale_callback(initial_storage, predecessor, public_keys, return_amount, event_id.clone())
                  );
 
             } else {
@@ -111,7 +112,8 @@ impl Marketplace {
         initial_storage: u64, 
         predecessor: AccountId,
         public_keys: Vec<PublicKey>,
-        return_amount: u128
+        return_amount: u128,
+        event_id: EventID
     ) -> Promise {
 
         // Get key information and add to owned keys
@@ -121,9 +123,18 @@ impl Marketplace {
             if let Ok(result) = near_sdk::serde_json::from_slice::<bool>(&val) {
                 if result{
                     // Add key to owned keys
-                    let mut keys_for_owner = self.owned_keys_per_account.get(&predecessor);
+                    let mut keys_for_owner = self.owned_tickets_per_account.get(&predecessor);
                     let keys_for_owner_vec = keys_for_owner.get_or_insert_with(|| Some(Vec::new()));
-                    keys_for_owner_vec.as_mut().unwrap().extend(public_keys.clone());
+
+                    let tickets: Vec<OwnedTicket> = public_keys
+                        .iter()
+                        .map(|key| OwnedTicket {
+                            public_key: key.clone(),
+                            event_id: event_id.clone(),
+                        })
+                        .collect();
+                    
+                    keys_for_owner_vec.as_mut().unwrap().extend(tickets.clone());
                     self.charge_storage(initial_storage, env::storage_usage(), return_amount as u64)
                 }else{
                     env::panic_str("Add Key Failed on Keypom Contract")
@@ -153,6 +164,7 @@ impl Marketplace {
         let memo: NftTransferMemo = near_sdk::serde_json::from_str(&nft_transfer_memo).expect("Could not parse nft_transfer_memo to get nft transfer memo"); 
         let public_key = memo.linkdrop_pk.clone();
         let new_public_key = memo.new_public_key.clone();
+        self.assert_resales_active(&public_key);
 
         // Verify Sale - price wise, was attached deposit enough?
         let received_deposit = env::attached_deposit();
@@ -242,17 +254,23 @@ impl Marketplace {
 
             // Remove key from old owner's owned keys if previous owner is not Keypom
             if old_owner != AccountId::try_from(self.keypom_contract.to_string()).unwrap() {
-                let new_key_list: Vec<PublicKey> = self.owned_keys_per_account.get(&old_owner).unwrap().unwrap().iter().filter(|&x| x != &public_key).cloned().collect();
-                self.owned_keys_per_account.insert(&old_owner, &Some(new_key_list));
+                let new_ticket_list: Vec<OwnedTicket> = self.owned_tickets_per_account.get(&old_owner).unwrap().unwrap().iter().filter(|&x| x.public_key != public_key).cloned().collect();
+                self.owned_tickets_per_account.insert(&old_owner, &Some(new_ticket_list));
             }
 
             // Add key to new owner's owned keys
             if new_owner.is_some(){
                 let unwrapped_new_owner = new_owner.unwrap();
                 // Add key to owned keys
-                let mut keys_for_owner = self.owned_keys_per_account.get(&unwrapped_new_owner);
+                let mut keys_for_owner = self.owned_tickets_per_account.get(&unwrapped_new_owner);
                 let keys_for_owner_vec = keys_for_owner.get_or_insert_with(|| Some(Vec::new()));
-                keys_for_owner_vec.as_mut().unwrap().push(public_key.clone());
+                let event_id = self.event_by_drop_id.get(&drop_id).expect("No event found for drop");
+                keys_for_owner_vec.as_mut().unwrap().push({
+                    OwnedTicket {
+                        public_key: public_key.clone(),
+                        event_id,
+                    }
+                });
             }
 
             let final_storage = env::storage_usage();

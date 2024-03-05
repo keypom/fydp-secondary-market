@@ -6,7 +6,7 @@ pub mod costs;
 pub mod ext_traits;
 pub mod helper;
 pub mod list;
-pub mod modify_sale;
+pub mod modify_resales;
 pub mod owner;
 pub mod types;
 pub mod view;
@@ -17,7 +17,7 @@ pub use costs::*;
 pub use ext_traits::*;
 pub use helper::*;
 pub use list::*;
-pub use modify_sale::*;
+pub use modify_resales::*;
 pub use owner::*;
 pub use types::*;
 pub use view::*;
@@ -68,7 +68,9 @@ pub struct Marketplace {
 
     // **************** By Account ****************
     // Keys owned by each account, for the purpose of displaying owned tickets
-    pub owned_keys_per_account: LookupMap<AccountId, Option<Vec<PublicKey>>>,
+    pub owned_tickets_per_account: LookupMap<AccountId, Option<Vec<OwnedTicket>>>,
+    // Stripe ID for event organizers
+    pub stripe_id_per_account: LookupMap<AccountId, String>,
 
     // **************** By Drop ****************
     // Drops that the marketplace can add keys to, by DropID
@@ -95,7 +97,8 @@ impl Default for Marketplace{
             // **************** By Event ID ****************
             event_by_id: UnorderedMap::new(StorageKeys::EventInfoPerDrop),
             // **************** By Account ****************
-            owned_keys_per_account: LookupMap::new(StorageKeys::KeysForOwner),
+            owned_tickets_per_account: LookupMap::new(StorageKeys::KeysForOwner),
+            stripe_id_per_account: LookupMap::new(StorageKeys::StripeByAccountId),
             // **************** By Drop ****************
             approved_drops: HashSet::new(),
             event_by_drop_id: LookupMap::new(StorageKeys::EventByDropId),
@@ -126,7 +129,8 @@ impl Marketplace {
              // **************** By Event ID ****************
              event_by_id: UnorderedMap::new(StorageKeys::EventInfoPerDrop),
              // **************** By Account ****************
-             owned_keys_per_account: LookupMap::new(StorageKeys::KeysForOwner),
+             owned_tickets_per_account: LookupMap::new(StorageKeys::KeysForOwner),
+             stripe_id_per_account: LookupMap::new(StorageKeys::StripeByAccountId),
              // **************** By Drop ****************
              approved_drops: HashSet::new(),
              event_by_drop_id: LookupMap::new(StorageKeys::EventByDropId),

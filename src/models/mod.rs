@@ -13,6 +13,7 @@ pub enum StorageKeys {
     KeysByDropId,
 
     KeysForOwner,
+    StripeByAccountId,
     
     MaxPricePerKey,
     ApprovalIDByPk,

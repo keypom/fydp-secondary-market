@@ -6,9 +6,7 @@ impl Marketplace{
         &mut self,
         event_id: EventID,
         event_name: Option<String>,
-        description: Option<String>,
-        date: Option<String>,
-        host: Option<AccountId>,
+        metadata: Option<String>,
         drop_ids: Vec<DropId>,
         max_tickets: HashMap<DropId, Option<u64>>,
         price_by_drop_id: HashMap<DropId, U128>,
@@ -18,11 +16,11 @@ impl Marketplace{
 
         let event_details = EventDetails{
             name: event_name,
-            host: host.unwrap_or(env::predecessor_account_id()),
+            host: env::signer_account_id(),
             event_id,
             status: Status::Active,
-            description,
-            date,
+            resale_status: ResaleStatus::Active,
+            metadata,
             max_tickets,
             drop_ids,
             price_by_drop_id
@@ -30,9 +28,14 @@ impl Marketplace{
         event_details
     }
 
-    pub(crate) fn assert_event_active(&self, event_id: EventID){
-        require!(self.event_by_id.get(&event_id).is_some(), "No Event Found");
-        require!(self.event_by_id.get(&event_id).unwrap().status == Status::Active, "Event is not active");
+    pub(crate) fn assert_event_active(&self, event_id: &EventID){
+        require!(self.event_by_id.get(event_id).is_some(), "No Event Found");
+        require!(self.event_by_id.get(event_id).unwrap().status == Status::Active, "Event is not active");
+    }
+
+    pub(crate) fn assert_resales_active(&self, public_key: &PublicKey){
+        let event_id = self.resale_info_per_pk.get(public_key).expect("Key Resale does not exist!").event_id;
+        require!(self.event_by_id.get(&event_id).unwrap().resale_status == ResaleStatus::Active, "Event resale market is not active");
     }
 
     pub(crate) fn drop_id_from_token_id(&self, token_id: &TokenId) -> DropId{

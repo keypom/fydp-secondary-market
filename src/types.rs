@@ -25,8 +25,16 @@ pub struct ResaleConditions {
 #[serde(crate = "near_sdk::serde")]
 pub enum Status {
     Active,
-    Inactive
+    Inactive,
 }
+
+#[derive(BorshDeserialize, BorshSerialize, Serialize, Deserialize, Clone, PartialEq)]
+#[serde(crate = "near_sdk::serde")]
+pub enum ResaleStatus {
+    Active,
+    Inactive,
+}
+
 
 #[derive(BorshDeserialize, BorshSerialize, Serialize, Deserialize, Clone)]
 #[serde(crate = "near_sdk::serde")]
@@ -40,10 +48,10 @@ pub struct EventDetails {
     pub event_id: String,
     // Event Status, can only be active or inactive
     pub status: Status,
-    // Description
-    pub description: Option<String>,
-    // Date
-    pub date: Option<String>,
+    // Resale Status, can only be active or inactive
+    pub resale_status: ResaleStatus,
+    // Event Metadata, in stringified JSON. Can include, date, location, description
+    pub metadata: Option<String>,
     // Maximum number of tickets
     pub max_tickets: HashMap<DropId, Option<u64>>,
     // Associated Drop IDs
@@ -52,6 +60,14 @@ pub struct EventDetails {
     // Tiered Pricing
     pub price_by_drop_id: HashMap<DropId, U128>,
 }
+
+#[derive(BorshDeserialize, BorshSerialize, Serialize, Deserialize, Clone)]
+#[serde(crate = "near_sdk::serde")]
+pub struct OwnedTicket{
+    pub public_key: PublicKey,
+    pub event_id: EventID
+}
+
 #[derive(BorshDeserialize, BorshSerialize, Serialize, Deserialize, Clone)]
 #[serde(crate = "near_sdk::serde")]
 pub struct ReceivedResaleInfo {

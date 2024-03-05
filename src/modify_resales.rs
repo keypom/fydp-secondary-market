@@ -9,6 +9,7 @@ impl Marketplace {
     // Modify a Key's Resale Price
     pub fn change_resale_price(&mut self, public_key: PublicKey, new_resale_price: U128){
         self.assert_no_global_freeze();
+        self.assert_resales_active(&public_key);
         let initial_storage = env::storage_usage();
         near_sdk::log!("initial bytes {}", initial_storage);
 
@@ -16,7 +17,7 @@ impl Marketplace {
         require!(self.resale_info_per_pk.get(&public_key).is_some(), "Key Resale does not exist!");
 
         // Predecessor must own the key
-        require!(self.owned_keys_per_account.get(&env::predecessor_account_id()).unwrap().unwrap().contains(&public_key), "Must own the access key being modified!");
+        require!(self.owned_tickets_per_account.get(&env::predecessor_account_id()).unwrap().unwrap().iter().map(|ticket| ticket.public_key.clone()).collect::<Vec<PublicKey>>().contains(&public_key), "Must own the access key being modified!");
 
         // Get resale, then modify price
         let mut resale = self.resale_info_per_pk.get(&public_key).unwrap();
@@ -32,6 +33,7 @@ impl Marketplace {
         public_key: PublicKey,
     ){
         self.assert_no_global_freeze();
+        self.assert_resales_active(&public_key);
         let initial_storage = env::storage_usage();
         near_sdk::log!("initial bytes {}", initial_storage);
 
@@ -39,7 +41,7 @@ impl Marketplace {
         require!(self.resale_info_per_pk.get(&public_key).is_some(), "Key Resale does not exist!");
 
         // Signer must own the key
-        require!(self.owned_keys_per_account.get(&env::signer_account_id()).unwrap().unwrap().contains(&public_key), "Must own the access key being de-list!");
+        require!(self.owned_tickets_per_account.get(&env::signer_account_id()).unwrap().unwrap().iter().map(|ticket| ticket.public_key.clone()).collect::<Vec<PublicKey>>().contains(&public_key), "Must own the access key being de-list!");
 
         // Get key's drop ID and then event, in order to modify all needed data
         ext_keypom::ext(AccountId::try_from(self.keypom_contract.to_string()).unwrap())

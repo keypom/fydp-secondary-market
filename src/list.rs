@@ -13,11 +13,11 @@ impl Marketplace {
         &mut self,
         // Unique event identifier 
         event_id: EventID,
+        // Host Strip ID
+        stripe_id: Option<String>,
         // Event Information
         event_name: Option<String>,
-        description: Option<String>,
-        date: Option<String>,
-        host: Option<AccountId>,
+        metadata: Option<String>,
         // Associated drops, prices, and max tickets for each. If None, assume unlimited tickets for that drop 
         max_tickets: HashMap<DropId, Option<u64>>,
         price_by_drop_id: HashMap<DropId, U128>,
@@ -39,12 +39,19 @@ impl Marketplace {
             drop_ids.push(drop_id.clone());
         }
 
+        // Insert new strip ID, or ensure current one is valid
+        if stripe_id.is_some(){
+            if self.stripe_id_per_account.contains_key(&env::signer_account_id()){
+                require!(self.stripe_id_per_account.get(&env::signer_account_id()).unwrap() == stripe_id.unwrap(), "Stripe ID does not match existing Stripe ID for this account!");
+            }else{
+                self.stripe_id_per_account.insert(&env::signer_account_id(), &stripe_id.unwrap());
+            }
+        }
+
         let final_event_details = self.create_event_details(
             event_id.clone(), 
-            event_name, 
-            description, 
-            date, 
-            host, 
+            event_name,
+            metadata,
             drop_ids,
             max_tickets, 
             price_by_drop_id);
@@ -85,6 +92,7 @@ impl Marketplace {
         let received_resale_info: ReceivedResaleInfo = near_sdk::serde_json::from_str(&msg).expect("Could not parse msg to get resale information");    
         let price = received_resale_info.price;
         let key = received_resale_info.public_key;
+        self.assert_resales_active(&key);
         
         // Require the key to be associated with an event                
         let drop_id = self.drop_id_from_token_id(&token_id);
@@ -117,5 +125,15 @@ impl Marketplace {
         // near_sdk::log!("attached deposit: {}", env::attached_deposit());
 
         //self.charge_deposit(near_sdk::json_types::U128::from(storage_cost));
+    }
+
+    // Add stripe ID to marketplace
+    #[payable]
+    pub fn register_stripe_id(&mut self, stripe_id: String){
+        self.assert_no_global_freeze();
+        let initial_storage = env::storage_usage();
+        require!(!self.stripe_id_per_account.contains_key(&env::signer_account_id()), "Stripe ID already registered for this account!");
+        self.stripe_id_per_account.insert(&env::signer_account_id(), &stripe_id);
+        self.charge_storage(initial_storage, env::storage_usage(), 0);
     }
 }

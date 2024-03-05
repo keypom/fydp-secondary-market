@@ -12,7 +12,7 @@ impl Marketplace {
     //TODO: IMPLEMENT STATUS CHECKS ON ALL SALES AND LISTINGS
     pub fn deactivate_event(event_id: EventId){
         self.assert_no_global_freeze();
-        self.assert_event_active(event_id);
+        self.assert_event_active(&event_id);
         let initial_storage = env::storage_usage();
         near_sdk::log!("initial bytes {}", initial_storage);
 
@@ -45,6 +45,41 @@ impl Marketplace {
         self.charge_storage(initial_storage, final_storage);
     }
 
+    pub fn deactivate_resales(event_id: EventId){
+        self.assert_no_global_freeze();
+        self.assert_event_active(&event_id);
+        let initial_storage = env::storage_usage();
+        near_sdk::log!("initial bytes {}", initial_storage);
+
+        // Ensure correct perms
+        require!(self.event_by_id.contains_key(&event_id), "No Event Found"); 
+        require!(self.event_by_id.get(&event_id).unwrap().host == env::predecessor_account_id(), "Must be event host to modify event details!");
+
+        self.event_by_id.get_mut(&event_id).map(|event| {
+            event.resale_status = ResaleStatus::Inactive;
+        });
+
+        let final_storage = env::storage_usage();
+        self.charge_storage(initial_storage, final_storage);
+    }
+
+    pub fn reactivate_resales(event_id: EventID){
+        self.assert_no_global_freeze();
+        require!(self.event_by_id.get(&event_id).expect("No Event Found").resale_status == ResaleStatus::Inactive, "Event resale market is not inactive, cannot reactivate");
+        let initial_storage = env::storage_usage();
+        near_sdk::log!("initial bytes {}", initial_storage);
+
+        // Ensure correct perms
+        require!(self.event_by_id.get(&event_id).unwrap().host == env::predecessor_account_id(), "Must be event host to modify event details!");
+
+        self.event_by_id.get_mut(&event_id).map(|event| {
+            event.resale_status = ResaleStatus::Active;
+        });
+
+        let final_storage = env::storage_usage();
+        self.charge_storage(initial_storage, final_storage);
+    }
+
     #[payable]
     pub fn modify_event_details(
         &mut self,
@@ -56,7 +91,7 @@ impl Marketplace {
         self.assert_no_global_freeze();
         let initial_storage = env::storage_usage();
         near_sdk::log!("initial bytes {}", initial_storage);
-        self.assert_event_active(event_id);
+        self.assert_event_active(&event_id);
 
         // Ensure correct perms
         require!(self.event_by_id.get(&event_id).is_some(), "No Event Found");
@@ -84,7 +119,7 @@ impl Marketplace {
         self.assert_no_global_freeze();
         let initial_storage = env::storage_usage();
         near_sdk::log!("initial bytes {}", initial_storage);
-        self.assert_event_active(event_id);
+        self.assert_event_active(&event_id);
 
         // Ensure correct perms
         require!(self.event_by_id.get(&event_id).is_some(), "No Event Found");
@@ -112,7 +147,7 @@ impl Marketplace {
         self.assert_no_global_freeze();
         let initial_storage = env::storage_usage();
         near_sdk::log!("initial bytes {}", initial_storage);
-        self.assert_event_active(event_id);
+        self.assert_event_active(&event_id);
 
         // Ensure correct perms
         require!(self.event_by_id.get(&event_id).is_some(), "No Event Found");
@@ -131,5 +166,53 @@ impl Marketplace {
         let final_storage = env::storage_usage();
         self.charge_storage(initial_storage, final_storage);
         
+    }
+
+    // Delete an Event and all associated resales
+    pub fn delete_event(
+        &mut self,
+        event_id: EventID
+    ){
+        self.assert_no_global_freeze();
+        let initial_storage = env::storage_usage();
+        near_sdk::log!("initial bytes {}", initial_storage);
+        self.assert_event_active(&event_id);
+
+        // Ensure correct perms
+        require!(self.event_by_id.get(&event_id).is_some(), "No Event Found");
+        require!(self.event_by_id.get(&event_id).unwrap().host == env::predecessor_account_id(), "Must be event host to modify event details!");
+
+        // delete from all by drop data structures
+        let drops = self.event_by_id.get(&event_id).unwrap().drop_ids;
+        for drop in drops{
+            self.approved_drops.remove(&drop);
+            self.event_by_drop_id.remove(&drop);
+            self.resales_per_drop.remove(&drop);
+        }
+
+        // remove ticket from owned tickets and resales by pk if it is for the desired event
+        for account in self.owned_tickets_per_account.keys(){
+            if let Some(owned_tickets) = self.owned_tickets_per_account.get(&account){
+                if let Some(tickets) = owned_tickets{
+                    for ticket in tickets{
+                        if ticket.event_id == event_id{
+                            self.owned_tickets_per_account.get_mut(&account).map(|tickets| {
+                                tickets.remove(&ticket);
+                            });
+                            if self.resale_info_per_pk.get(&ticket.public_key).is_some(){
+                                self.resale_info_per_pk.remove(&ticket.public_key);
+                            }
+                        }
+                    }
+                }
+            }
+        }
+
+
+        // delete event
+        self.event_by_id.remove(&event_id);
+
+        let final_storage = env::storage_usage();
+        self.charge_storage(initial_storage, final_storage);
     }
 }

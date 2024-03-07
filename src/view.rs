@@ -9,21 +9,24 @@ impl Marketplace{
     }
     
     // View calls -> all events/drops, filter by funder, get event info, get owner, keypom constract, resale price per pk, resales per event, etc.
-    pub fn get_events_per_funder(&self, funder: AccountId, limit: Option<u64>, from_index: Option<u64>) -> Vec<EventDetails>{
+
+    pub fn get_events_per_funder(&self, funder: AccountId, limit: Option<u64>, from_index: Option<u64>) -> Vec<ExtEventDetails>{
         let funder_events: Vec<EventDetails> = self.event_by_id.iter().filter(|x| x.1.funder_id == funder.clone()).map(|x| x.1).collect();
         let start = u128::from(from_index.unwrap_or(0));
-         // Iterate through each token using an iterator
+         // Iterate through each event using an iterator
          funder_events.into_iter()
          // Skip to the index we specified in the start variable
          .skip(start as usize) 
          // Take the first "limit" elements in the vector. If we didn't specify a limit, use 50
          .take(limit.unwrap_or(50) as usize) 
+         // Convert each to a External Event
+         .map(|event| event.to_external_event())
          // Since we turned the keys into an iterator, we need to turn it back into a vector to return
          .collect()
     }
 
-    pub fn get_event_information(&self, event_id: EventID) -> EventDetails {
-        self.event_by_id.get(&event_id).expect("No Event Found")
+    pub fn get_event_information(&self, event_id: EventID) -> ExtEventDetails {
+        self.event_by_id.get(&event_id).expect("No Event Found").to_external_event()
     }
 
     // Get drop's stripe information, if it exists. Allows frontend to expose stripe payment method
@@ -85,7 +88,7 @@ impl Marketplace{
     }
 
     // get all event details
-    pub fn get_events(&self, limit: Option<u64>, from_index: Option<u64>) -> Vec<EventDetails> {
+    pub fn get_events(&self, limit: Option<u64>, from_index: Option<u64>) -> Vec<ExtEventDetails> {
         let start = u128::from(from_index.unwrap_or(0));
          // Iterate through each token using an iterator
          self.event_by_id.iter()
@@ -94,7 +97,9 @@ impl Marketplace{
          // Take the first "limit" elements in the vector. If we didn't specify a limit, use 50
          .take(limit.unwrap_or(50) as usize) 
          // Get only the event details
-         .map(|x| x.1)
+         .map(|id_and_event| id_and_event.1)
+         // Convert each to a External Event
+         .map(|event| event.to_external_event())
          // Since we turned the keys into an iterator, we need to turn it back into a vector to return
          .collect()
     }

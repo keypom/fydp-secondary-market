@@ -54,6 +54,19 @@ pub struct EventDetails {
 }
 
 #[derive(BorshDeserialize, BorshSerialize, Serialize, Deserialize, Clone)]
+pub struct ExtEventDetails{
+    // Event host, same as drop funders
+    pub funder_id: AccountId,
+    // Event ID, in case on needing to abstract on contract to multiple drops per event
+    // For now, event ID is drop ID
+    pub event_id: String,
+    // Event Status, can only be active or inactive
+    pub status: Status,
+    // Sale Information
+    pub ticket_info: HashMap<DropId, TicketInfo>
+}
+
+#[derive(BorshDeserialize, BorshSerialize, Serialize, Deserialize, Clone)]
 pub struct TicketInfo {
     // Maximum number of tickets
     pub max_tickets: Option<u64>,

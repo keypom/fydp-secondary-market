@@ -103,7 +103,6 @@ impl Marketplace {
     }
 
     // Listing ticket through NFT Approve
-    // TODO: CURRENTLY EATS UP ALL STORAGE, NEED TO RECONSIDER
     pub fn nft_on_approve(
         &mut self,
         token_id: TokenId,
@@ -139,15 +138,6 @@ impl Marketplace {
         };
 
         self.resales.get(&drop_id).as_mut().unwrap().insert(&key, &resale_info);
-
-        // ~~~~~~~~~~~~~~~~~~` STORAGE STUFF ~~~~~~~~~~~~~~~~~~`
-        // Calculate used storage and charge the user
-        // let net_storage = env::storage_usage() - initial_storage;
-        // let storage_cost = net_storage as Balance * env::storage_byte_cost();
-        // near_sdk::log!("storage cost {}", storage_cost);
-        // near_sdk::log!("attached deposit: {}", env::attached_deposit());
-
-        //self.charge_deposit(near_sdk::json_types::U128::from(storage_cost));
     }
 
     // Add stripe ID to marketplace

@@ -98,9 +98,12 @@ impl Marketplace {
             if let Ok(drop_info) = near_sdk::serde_json::from_slice::<ExtDrop>(&val) {
                 let current_tickets = drop_info.next_key_id + 1;
                 if (max_tickets - current_tickets) > public_keys.len() as u64 {
-                    // transfer deposit back to sender, then panic
+                    // Maximum number of tickets reached, send deposit back to buyer
+                    near_sdk::log!("Maximum Number of tickets reached!");
+                    near_sdk::log!("Maximim Tickets: {}, Current Tickets: {}, Tried to add {} tickets", max_tickets, current_tickets, public_keys.len());
+                    Promise::new(buyer_id).transfer(ticket_payment + keypom_deposit);
                 }else{
-                    // attach keypom storage deposit here!
+                    // Add keys with Keypom Deposit
                     ext_keypom::ext(AccountId::try_from(self.keypom_contract.to_string()).unwrap())
                     .with_attached_deposit(keypom_deposit)
                     .add_keys(drop_id.to_string(), keys_vec, None)
@@ -129,26 +132,17 @@ impl Marketplace {
         ticket_payment: u128,
         ticket_price: u128
     ) -> Promise {
-        // Get key information and add to owned keys
-        if let PromiseResult::Successful(val) = env::promise_result(0) {
-            if let Ok(result) = near_sdk::serde_json::from_slice::<bool>(&val) {
-                if result{
-                    // refund excess to buyer and send ticket price to funder
-                    let funder = self.event_by_id.get(&event_id).unwrap().funder_id;
-                    near_sdk::log!("Add Key Successful, transferring funds to funder and refunding excess to buyer");
-                    Promise::new(buyer_id).transfer(return_amount);
-                    Promise::new(funder).transfer(ticket_price).as_return()
-                }else{
-                    // transfer price and keypom deposit (everything) back to buyer
-                    near_sdk::log!("Add Key Failed on Keypom Contract, refunding to buyer");
-                    Promise::new(buyer_id).transfer(ticket_payment + keypom_deposit).as_return()
-                }
-            }else {
-             env::panic_str("Could not parse add key bool response from Keypom contract");
-            }      
+        // Add keys will panic if it fails
+        if let PromiseResult::Successful(_val) = env::promise_result(0) {
+            // refund excess to buyer and send ticket price to funder
+            let funder = self.event_by_id.get(&event_id).unwrap().funder_id;
+            near_sdk::log!("Add Key Successful, transferring funds to funder and refunding excess to buyer");
+            Promise::new(buyer_id).transfer(return_amount);
+            Promise::new(funder).transfer(ticket_price).as_return()
         }
         else{
-            env::panic_str("Add Key Failed!")
+            near_sdk::log!("Add Key Failed on Keypom Contract, refunding to buyer");
+            Promise::new(buyer_id).transfer(ticket_payment + keypom_deposit).as_return()
         }  
     }
     
@@ -192,13 +186,13 @@ impl Marketplace {
                        .nft_transfer(new_owner.clone(), approval_id, serde_json::to_string(&memo).unwrap())
                        .then(
                             Self::ext(env::current_account_id())
-                            .buy_resale_middle_callback(buyer_id, seller_id, u128::from(ticket_price), ticket_payment)
+                            .buy_resale_callback(buyer_id, seller_id, u128::from(ticket_price), ticket_payment)
                         );
         
     }
 
     #[private]
-    pub fn buy_resale_middle_callback(
+    pub fn buy_resale_callback(
         &mut self,
         buyer_id: AccountId,
         seller_id: AccountId,

@@ -55,7 +55,7 @@ impl Marketplace {
         }
 
         // Calculate used storage and charge the user
-        self.charge_storage(initial_storage, env::storage_usage(), 0);
+        self.charge_storage(initial_storage, env::storage_usage(), env::attached_deposit());
 
         event_id
     }

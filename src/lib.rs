@@ -59,6 +59,8 @@ pub struct Marketplace {
     pub global_freeze: bool,
     /// Maximum markup price, used to calculate resale ceiling upon event creation, in percentage (200 = 2x markup, 100 = 1x markup, etc.)
     pub max_markup: u64,
+    // Stripe account
+    pub stripe_account: AccountId,
     
     /// **************** Keypom ****************
     pub keypom_contract: AccountId,
@@ -85,6 +87,7 @@ impl Default for Marketplace{
             contract_owner_id: AccountId::try_from("minqi.testnet".to_string()).unwrap(),
             global_freeze: false,
             max_markup: 150, // 1.5x markup
+            stripe_account: AccountId::try_from("mintlu.testnet".to_string()).unwrap(),
             /// **************** Keypom ****************
             keypom_contract: AccountId::try_from("testing-nearcon-keypom.testnet".to_string()).unwrap(),
             // **************** By Event ID ****************
@@ -105,16 +108,18 @@ impl Marketplace {
 
     #[init]
     pub fn new(
-        contract_owner: String,
-        keypom_contract: String
+        keypom_contract: Option<String>,
+        stripe_account: Option<String>,
+        contract_owner: Option<String>
     ) -> Self {
         Self {
              /// **************** Admin Stuff ****************
-             contract_owner_id: AccountId::try_from(contract_owner.to_string()).unwrap(),
+             contract_owner_id: AccountId::try_from(contract_owner.unwrap_or("minqi.testnet".to_string())).unwrap(),
              global_freeze: false,
              max_markup: 150, // 1.5x markup
+             stripe_account: AccountId::try_from(stripe_account.unwrap_or("kp-market-stripe.testnet".to_string())).unwrap(),
              /// **************** Keypom ****************
-             keypom_contract: AccountId::try_from(keypom_contract.to_string()).unwrap(),
+             keypom_contract: AccountId::try_from(keypom_contract.unwrap_or("1709145182592-kp-ticketing.testnet".to_string())).unwrap(),
              // **************** By Event ID ****************
              event_by_id: UnorderedMap::new(StorageKeys::EventInfoPerDrop),
              // **************** By Account ****************

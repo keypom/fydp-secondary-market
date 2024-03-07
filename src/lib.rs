@@ -2,6 +2,7 @@
 
 pub mod models;
 pub mod buy;
+pub mod balance;
 pub mod costs;
 pub mod ext_traits;
 pub mod ext_types;
@@ -15,6 +16,7 @@ pub mod view;
 
 pub use models::*;
 pub use buy::*;
+pub use balance::*;
 pub use costs::*;
 pub use ext_traits::*;
 pub use ext_types::*;
@@ -72,6 +74,8 @@ pub struct Marketplace {
     // **************** By Account ****************
     // Stripe ID for event organizers
     pub stripe_id_per_account: LookupMap<AccountId, String>,
+    // Marketplace Balance
+    pub marketplace_balance: LookupMap<AccountId, Balance>,
 
     // **************** By Drop ****************
     // Event ID given a drop ID
@@ -94,6 +98,7 @@ impl Default for Marketplace{
             event_by_id: UnorderedMap::new(StorageKeys::EventInfoPerDrop),
             // **************** By Account ****************
             stripe_id_per_account: LookupMap::new(StorageKeys::StripeByAccountId),
+            marketplace_balance: LookupMap::new(StorageKeys::MarketplaceBalanceByAccountId),
             // **************** By Drop ****************
             event_by_drop_id: LookupMap::new(StorageKeys::EventByDropId),
             resales: UnorderedMap::new(StorageKeys::ResaleByDropId),
@@ -124,6 +129,7 @@ impl Marketplace {
              event_by_id: UnorderedMap::new(StorageKeys::EventInfoPerDrop),
              // **************** By Account ****************
              stripe_id_per_account: LookupMap::new(StorageKeys::StripeByAccountId),
+             marketplace_balance: LookupMap::new(StorageKeys::MarketplaceBalanceByAccountId),
              // **************** By Drop ****************
              event_by_drop_id: LookupMap::new(StorageKeys::EventByDropId),
              resales: UnorderedMap::new(StorageKeys::ResaleByDropId)

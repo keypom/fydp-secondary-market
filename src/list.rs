@@ -41,7 +41,7 @@ impl Marketplace {
 
         let final_event_details = self.create_event_details(
             event_id.clone(), 
-            funder_id,
+            funder_id.clone(),
             ticket_information,
         );
 
@@ -55,7 +55,7 @@ impl Marketplace {
         }
 
         // Calculate used storage and charge the user
-        self.charge_storage(initial_storage, env::storage_usage(), env::attached_deposit());
+        self.charge_storage(initial_storage, env::storage_usage(), env::attached_deposit(), funder_id);
 
         event_id
     }
@@ -99,7 +99,7 @@ impl Marketplace {
         }
 
         let final_storage = env::storage_usage();
-        self.charge_storage(initial_storage, final_storage, 0);
+        self.charge_storage(initial_storage, final_storage, 0, env::predecessor_account_id());
     }
 
     // Listing ticket through NFT Approve
@@ -147,6 +147,6 @@ impl Marketplace {
         let initial_storage = env::storage_usage();
         require!(!self.stripe_id_per_account.contains_key(&env::predecessor_account_id()), "Stripe ID already registered for this account!");
         self.stripe_id_per_account.insert(&env::predecessor_account_id(), &stripe_id);
-        self.charge_storage(initial_storage, env::storage_usage(), 0);
+        self.charge_storage(initial_storage, env::storage_usage(), 0, env::predecessor_account_id());
     }
 }

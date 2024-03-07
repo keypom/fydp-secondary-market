@@ -14,6 +14,7 @@ pub enum StorageKeys {
     ResaleByDropId,
     
     StripeByAccountId,
+    MarketplaceBalanceByAccountId,
     
     MaxPricePerKey,
     ApprovalIDByPk,

@@ -44,7 +44,7 @@ impl Marketplace {
             self.resales.get(&drop_id).as_mut().unwrap().remove(&public_key);
 
             let final_storage = env::storage_usage();
-            self.charge_storage(initial_storage, final_storage, 0);
+            self.charge_storage(initial_storage, final_storage, 0, resale.seller_id);
         } else {
             env::panic_str("Key Resale does not exist!");
         }

@@ -26,7 +26,7 @@ impl Marketplace {
         });
 
         let final_storage = env::storage_usage();
-        self.charge_storage(initial_storage, final_storage, 0);
+        self.charge_storage(initial_storage, final_storage, 0, env::predecessor_account_id());
     }
 
     pub fn reactivate_event(&mut self, event_id: EventID){
@@ -43,7 +43,7 @@ impl Marketplace {
         });
 
         let final_storage = env::storage_usage();
-        self.charge_storage(initial_storage, final_storage, 0);
+        self.charge_storage(initial_storage, final_storage, 0, env::predecessor_account_id());
     }
 
     pub fn deactivate_resales(&mut self, event_id: EventID){
@@ -61,7 +61,7 @@ impl Marketplace {
         });
 
         let final_storage = env::storage_usage();
-        self.charge_storage(initial_storage, final_storage, 0);
+        self.charge_storage(initial_storage, final_storage, 0, env::predecessor_account_id());
     }
 
     pub fn reactivate_resales(&mut self, event_id: EventID){
@@ -78,7 +78,7 @@ impl Marketplace {
         });
 
         let final_storage = env::storage_usage();
-        self.charge_storage(initial_storage, final_storage, 0);
+        self.charge_storage(initial_storage, final_storage, 0, env::predecessor_account_id());
     }
 
     // Must update prices for all drops together, free drops should have price set to 0
@@ -109,7 +109,7 @@ impl Marketplace {
         self.event_by_id.insert(&event_id, &event);
 
         let final_storage = env::storage_usage();
-        self.charge_storage(initial_storage, final_storage, 0);
+        self.charge_storage(initial_storage, final_storage, 0, env::predecessor_account_id());
     }
 
     // Delete an Event and all associated resales
@@ -138,6 +138,6 @@ impl Marketplace {
         self.event_by_id.remove(&event_id);
 
         let final_storage = env::storage_usage();
-        self.charge_storage(initial_storage, final_storage, 0);
+        self.charge_storage(initial_storage, final_storage, 0, env::predecessor_account_id());
     }
 }

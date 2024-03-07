@@ -13,14 +13,12 @@ impl Marketplace {
         &mut self,
         // Unique event identifier 
         event_id: EventID,
+        // Host
+        funder_id: AccountId,
         // Host Strip ID
         stripe_id: Option<String>,
-        // Event Information
-        event_name: Option<String>,
-        metadata: Option<String>,
         // Associated drops, prices, and max tickets for each. If None, assume unlimited tickets for that drop 
-        max_tickets: HashMap<DropId, Option<u64>>,
-        price_by_drop_id: HashMap<DropId, U128>,
+        ticket_information: HashMap<DropId, TicketInfo>
     ) -> EventID {
         self.assert_no_global_freeze();
         let initial_storage = env::storage_usage();
@@ -29,15 +27,8 @@ impl Marketplace {
         // Ensure event with this ID does not already exist
         require!(self.event_by_id.get(&event_id).is_none(), "Event ID already exists!");
 
-        let mut drop_ids: Vec<DropId> = vec![];
-
         // Ensure drop IDs in max tickets and price_by_drop_id match
-        require!(max_tickets.len() > 0 && price_by_drop_id.len() > 0, "No drops provided!");
-        require!(max_tickets.len() == price_by_drop_id.len(), "Max Tickets and Prices must have same number of drops!");
-        for drop_id in max_tickets.clone().keys(){
-            require!(price_by_drop_id.contains_key(drop_id), "Max Tickets and Prices must have the same drops!");
-            drop_ids.push(drop_id.clone());
-        }
+        require!(ticket_information.len() > 0);
 
         // Insert new stripe ID, or ensure current one is valid
         if stripe_id.is_some(){
@@ -50,21 +41,17 @@ impl Marketplace {
 
         let final_event_details = self.create_event_details(
             event_id.clone(), 
-            event_name,
-            metadata,
-            drop_ids,
-            max_tickets, 
-            price_by_drop_id);
+            funder_id,
+            ticket_information,
+        );
 
         // Insert by event ID stuff first
         self.event_by_id.insert(&final_event_details.event_id, &final_event_details);
  
         // By Drop ID data structures
-        let stored_drop_ids = final_event_details.drop_ids;
-        for drop_id in stored_drop_ids {
-            self.approved_drops.insert(drop_id.clone());
+        for drop_id in final_event_details.ticket_info.keys() {
             self.event_by_drop_id.insert(&drop_id, &final_event_details.event_id);
-            self.resales_per_drop.insert(&drop_id, &None);
+            self.resales.insert(&drop_id, &UnorderedMap::new(StorageKeys::ResaleByPK));
         }
 
         // Calculate used storage and charge the user
@@ -78,9 +65,7 @@ impl Marketplace {
     pub fn add_drops_to_event(
         &mut self,
         event_id: EventID,
-        drop_ids: Vec<DropId>,
-        max_tickets: HashMap<DropId, Option<u64>>,
-        price_by_drop_id: HashMap<DropId, U128>,
+        ticket_information: HashMap<DropId, TicketInfo>
     ){
         self.assert_no_global_freeze();
         let initial_storage = env::storage_usage();
@@ -89,40 +74,28 @@ impl Marketplace {
 
         // Ensure correct perms
         require!(self.event_by_id.get(&event_id).is_some(), "No Event Found");
-        require!(self.event_by_id.get(&event_id).unwrap().host == env::predecessor_account_id(), "Must be event host to modify event details!");
+        require!(self.event_by_id.get(&event_id).unwrap().funder_id == env::predecessor_account_id(), "Must be event host to modify event details!");
 
-        // Ensure drop IDs in max tickets and price_by_drop_id match
-        require!(max_tickets.len() == price_by_drop_id.len() && price_by_drop_id.len() == drop_ids.len(), "Drops, Max Tickets and Prices must have same number of drops!");
-        require!(max_tickets.len() > 0, "No drops provided!");
-        for drop_id in drop_ids.clone(){
-            require!(price_by_drop_id.contains_key(&drop_id), "Prices and Drops must have the same drops!");
-            require!(max_tickets.contains_key(&drop_id), "Max Tickets and Drops must have the same drops!");
-        }
-
-        // Ensure all drops are approved
-        for drop_id in drop_ids.iter(){
-            require!(self.approved_drops.contains(drop_id), "Drop not approved for use in marketplace!");
-        }
+        require!(ticket_information.len() > 0, "No drops provided to add to event!");
 
         // Ensure all drops are not already in event
         let event = self.event_by_id.get(&event_id).expect("No Event Found");
-        for drop_id in drop_ids.iter(){
-            require!(!event.drop_ids.contains(drop_id), "Drop already in event!");
+
+        for drop_id in ticket_information.keys(){
+            require!(!event.ticket_info.keys().collect::<Vec<DropId>>().contains(&drop_id), "Drop already in event!");
         }
 
         // Update event details
         let mut event = self.event_by_id.get(&event_id).expect("No Event Found");
-        event.drop_ids.extend(drop_ids.clone());
-        for drop_id in drop_ids.iter(){
-            event.max_tickets.insert(drop_id.clone(), max_tickets.get(drop_id).unwrap().clone());
-            event.price_by_drop_id.insert(drop_id.clone(), price_by_drop_id.get(drop_id).unwrap().clone());
+        for ticket_tier_info in ticket_information.iter(){
+            event.ticket_info.insert(&ticket_tier_info.0, &ticket_tier_info.1);
         }
         self.event_by_id.insert(&event_id, &event);
 
         // Update by drop ID data structures
-        for drop_id in drop_ids {
+        for drop_id in ticket_information.keys() {
             self.event_by_drop_id.insert(&drop_id, &event_id);
-            self.resales_per_drop.insert(&drop_id, &None);
+            self.resales.insert(&drop_id, &UnorderedMap::new(StorageKeys::ResaleByPK));
         }
 
         let final_storage = env::storage_usage();
@@ -147,30 +120,25 @@ impl Marketplace {
         let received_resale_info: ReceivedResaleInfo = near_sdk::serde_json::from_str(&msg).expect("Could not parse msg to get resale information");    
         let price = received_resale_info.price;
         let key = received_resale_info.public_key;
-        self.assert_resales_active(&key);
         
         // Require the key to be associated with an event                
         let drop_id = self.drop_id_from_token_id(&token_id);
         let event_id = self.event_by_drop_id.get(&drop_id).expect("Key not associated with any event, cannot list!");
+        self.assert_resales_active(&event_id);
 
         // ~~~~~~~~~~~~~~ BEGIN LISTING PROCESS ~~~~~~~~~~~~~~
         // Clamp price and create resale info object
         let final_price = self.clamp_price(price, drop_id.clone());
-        let resale_info: StoredResaleInformation = StoredResaleInformation{
+        let resale_info: ResaleInfo = ResaleInfo{
             price: final_price,
             public_key: key.clone(),
+            seller_id: owner_id,
             approval_id: Some(approval_id),
             event_id: event_id.clone(),
             drop_id: drop_id.clone(),
         };
 
-        // Resale per PK
-        self.resale_info_per_pk.insert(&key, &resale_info);
-
-        // Update resales per drop
-        let mut resale_from_drop = self.resales_per_drop.get(&drop_id.clone());
-        let resale_from_drop_vec = resale_from_drop.get_or_insert_with(|| Some(Vec::new()));
-        resale_from_drop_vec.as_mut().unwrap().push(resale_info.clone());
+        self.resales.get(&drop_id).as_mut().unwrap().insert(&key, &resale_info);
 
         // ~~~~~~~~~~~~~~~~~~` STORAGE STUFF ~~~~~~~~~~~~~~~~~~`
         // Calculate used storage and charge the user

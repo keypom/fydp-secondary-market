@@ -11,11 +11,13 @@ pub enum StorageKeys {
     
     EventByDropId,
     KeysByDropId,
-
-    KeysForOwner,
+    ResaleByDropId,
+    
     StripeByAccountId,
     
     MaxPricePerKey,
     ApprovalIDByPk,
-    ResaleForPK,
+    ResaleByPK,
+
+    TicketInfoPerDrop
 }

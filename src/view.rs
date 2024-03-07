@@ -1,30 +1,6 @@
 use crate::*;
 
 #[near_bindgen]
-#[derive(BorshDeserialize, BorshSerialize, Serialize, Deserialize, Clone)]
-pub struct ResaleInformation {
-    pub price: U128,
-    pub public_key: PublicKey,
-    pub event_id: String,
-    pub approval_id: Option<u64>,
-    // Public Facing event name
-    pub event_name: Option<String>,
-    // Event hosts, not necessarily the same as all the drop funders
-    pub host: AccountId,
-    pub metadata: Option<String>,
-   
-}
-#[near_bindgen]
-#[derive(BorshDeserialize, BorshSerialize, Serialize, Deserialize, Clone)]
-pub struct StoredResaleInformation {
-    pub price: U128,
-    pub public_key: PublicKey,
-    pub approval_id: Option<u64>,
-    pub event_id: EventID,
-    pub drop_id: DropId
-}
-
-#[near_bindgen]
 impl Marketplace{
 
     // Return marketplace maximum markup
@@ -34,7 +10,7 @@ impl Marketplace{
     
     // View calls -> all events/drops, filter by funder, get event info, get owner, keypom constract, resale price per pk, resales per event, etc.
     pub fn get_events_per_funder(&self, funder: AccountId, limit: Option<u64>, from_index: Option<u64>) -> Vec<EventDetails>{
-        let funder_events: Vec<EventDetails> = self.event_by_id.iter().filter(|x| x.1.host == funder.clone()).map(|x| x.1).collect();
+        let funder_events: Vec<EventDetails> = self.event_by_id.iter().filter(|x| x.1.funder_id == funder.clone()).map(|x| x.1).collect();
         let start = u128::from(from_index.unwrap_or(0));
          // Iterate through each token using an iterator
          funder_events.into_iter()
@@ -46,33 +22,13 @@ impl Marketplace{
          .collect()
     }
 
-    // Probably not needed
-    pub fn get_num_tiers_per_event(&self, event_id: EventID) -> u64 {
-        self.event_by_id.get(&event_id).unwrap().drop_ids.len() as u64
-    }
-    // return sorted list of drop IDs based on price, default high to low pricing
-    pub fn get_tiered_drop_list_for_event(&self, event_id: EventID, high_to_low: Option<bool>) -> Vec<DropId> {
-        let mut drops: Vec<DropId> = self.event_by_id.get(&event_id).unwrap().drop_ids;
-
-        drops.sort_by_key(|drop_id| {
-            self.event_by_id.get(&event_id).as_ref().unwrap().price_by_drop_id.get(drop_id).unwrap().clone()
-        });
-
-        // sort high to low if specified, otherwise, keep it low to high
-        if high_to_low.unwrap_or(false){
-            drops.reverse();
-        }
-        
-        drops
-    }
-
     pub fn get_event_information(&self, event_id: EventID) -> EventDetails {
         self.event_by_id.get(&event_id).expect("No Event Found")
     }
 
     // Get drop's stripe information, if it exists. Allows frontend to expose stripe payment method
     pub fn event_stripe_status(&self, event_id: EventID) -> (String, String){
-        let funder = self.event_by_id.get(&event_id).expect("No Event Found").host;
+        let funder = self.event_by_id.get(&event_id).expect("No Event Found").funder_id;
         if self.stripe_id_per_account.contains_key(&funder){
             let stripe_id = self.stripe_id_per_account.get(&funder).unwrap();
             (stripe_id.clone(), funder.to_string())
@@ -83,81 +39,44 @@ impl Marketplace{
     }
 
     pub fn get_stripe_enabled_events(&self) -> Vec<EventID> {
-        self.event_by_id.iter().filter(|x| self.stripe_id_per_account.contains_key(&x.1.host)).map(|x| x.1.event_id).collect()
-    }
-
-    // Return ticket resll and event info
-    pub fn get_full_resale_info_per_pk(&self, public_key: PublicKey) -> ResaleInformation {
-        let simple_info = self.resale_info_per_pk.get(&public_key).expect("No resale for Public Key");
-        let event = self.event_by_id.get(&simple_info.event_id).expect("No event found");
-        ResaleInformation{
-            price: simple_info.price,
-            public_key: simple_info.public_key,
-            approval_id: simple_info.approval_id,
-            event_name: event.name,
-            host: event.host,
-            metadata: event.metadata,
-            event_id: simple_info.event_id
-        }
+        self.event_by_id.iter().filter(|x| self.stripe_id_per_account.contains_key(&x.1.funder_id)).map(|x| x.1.event_id).collect()
     }
 
     // get all resales (ticket, price, approval ID) for an event, can be empty
-    pub fn get_resales_per_event(&self, event_id: EventID) -> Option<Vec<StoredResaleInformation>> {
-        let drops = self.event_by_id.get(&event_id).expect("No Event Found for Event ID").drop_ids;
-        let mut all_resales: Vec<StoredResaleInformation> = Vec::new();
+    pub fn get_resales_per_event(&self, event_id: EventID) -> Option<Vec<ResaleInfo>> {
+        let event = self.event_by_id.get(&event_id).expect("No Event Found for Event ID");
+        let drops = event.ticket_info.keys();
+        let mut all_resales: Vec<ResaleInfo> = Vec::new();
         for drop in drops{
-            let resales = self.resales_per_drop.get(&drop).unwrap_or(Some(Vec::new()));
-            for resale in resales.unwrap_or(Vec::new()) {
-                all_resales.push(resale);
+            let resales = self.resales.get(&drop).unwrap_or(UnorderedMap::new(StorageKeys::ResaleByPK));
+            for resale in resales.iter() {
+                all_resales.push(resale.1);
             }
         }
         Some(all_resales)
     }
 
     // All resales on the contract, sorted by event
-    pub fn get_all_resales(&self) -> Vec<Vec<ResaleInformation>> {
+    pub fn get_all_resales(&self) -> Vec<Vec<ResaleInfo>> {
         let all_event_id = self.get_event_ids();
-        let mut all_resales: Vec<Vec<ResaleInformation>> = Vec::new();
+        let mut all_resales: Vec<Vec<ResaleInfo>> = Vec::new();
         near_sdk::log!("all event id {:?}", all_event_id);
         for event_id in all_event_id {
-            // Same for all keys in event
-            let event = self.event_by_id.get(&event_id.clone()).expect("Event details not found");
-            let drops = event.drop_ids;
-            let mut event_resales = Vec::new();
-
-            for drop in drops{
-                let resales = self.resales_per_drop.get(&drop).unwrap_or(Some(Vec::new()));
-                for resale in resales.unwrap_or(Vec::new()) {
-                    let resale_info = ResaleInformation{
-                        price: resale.price,
-                        public_key: resale.public_key,
-                        approval_id: resale.approval_id,
-                        event_id: event_id.clone(),
-                        event_name: event.name.clone(),
-                        host: event.host.clone(),
-                        metadata: event.metadata.clone()
-                    };
-                    event_resales.push(resale_info);
-                }
-            }
-            all_resales.push(event_resales);
+            let resales = self.get_resales_per_event(event_id).expect("Get resales per event returning None");
+            all_resales.push(resales);
         }
         all_resales
     }
 
-    // Al drops that marketplace can add keys to
-    pub fn get_drops_on_contract(&self) -> Vec<DropId> {
-        self.approved_drops.iter().cloned().collect()
+    // get ticket price
+    pub fn get_ticket_price(&self, drop_id: DropId) -> U128 {
+        let event_id = self.event_by_drop_id.get(&drop_id).expect("No event found for drop");
+        self.event_by_id.get(&event_id).expect("No event found for event").ticket_info.get(&drop_id).expect("No price found for drop").price.clone()
     }
 
     // get all event IDs
     pub fn get_event_ids(&self) -> Vec<EventID> {
         self.event_by_id.iter().map(|x| x.1.event_id).collect()
-    }
-
-    // get all tickets for a certain owner
-    pub fn get_tickets_for_owner(&self, owner_id: AccountId) -> Vec<OwnedTicket> {
-        self.owned_tickets_per_account.get(&owner_id).unwrap().unwrap()
     }
 
     // get stripe ID for an account

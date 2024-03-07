@@ -12,24 +12,24 @@ impl Marketplace {
         Promise::new(env::predecessor_account_id()).transfer(amount_to_refund).as_return()
     }
 
-    pub(crate) fn charge_storage(&mut self, initial_storage: u64, final_storage: u64, credit: u64) -> Promise{
+    pub(crate) fn charge_storage(&mut self, initial_storage: u64, final_storage: u64, credit: u128) -> Promise{
         if final_storage > initial_storage {
             let storage_used = final_storage - initial_storage;
             let cost = (storage_used as u128 * env::storage_byte_cost()) as u128;
             if cost > credit as u128 {
-                self.charge_deposit(near_sdk::json_types::U128(cost - credit as u128))
+                self.charge_deposit(near_sdk::json_types::U128(cost - credit))
             }
             else{
-                Promise::new(env::predecessor_account_id()).transfer(credit as u128- cost).as_return()
+                Promise::new(env::predecessor_account_id()).transfer(credit - cost).as_return()
             }
         }
         else if final_storage < initial_storage {
             let storage_freed = initial_storage - final_storage;
             let storage_freed_cost = storage_freed as u128 * env::storage_byte_cost() as u128;
-            Promise::new(env::predecessor_account_id()).transfer(storage_freed_cost + credit as u128).as_return()   
+            Promise::new(env::predecessor_account_id()).transfer(storage_freed_cost + credit).as_return()   
         }
         else{
-            Promise::new(env::predecessor_account_id()).transfer(credit as u128).as_return()
+            Promise::new(env::predecessor_account_id()).transfer(credit).as_return()
         }
     }
 }

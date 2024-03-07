@@ -16,4 +16,8 @@ impl Marketplace {
         let current_balance = self.marketplace_balance.get(&account_id).unwrap_or(0);
         self.marketplace_balance.insert(&account_id, &(current_balance + deposit));
     }
+
+    pub fn get_user_marketplace_balance(&self, account_id: AccountId) -> U128{
+        self.marketplace_balance.get(&account_id).unwrap_or(0).into()
+    }
 }

@@ -10,8 +10,8 @@ impl Marketplace{
     
     // View calls -> all events/drops, filter by funder, get event info, get owner, keypom constract, resale price per pk, resales per event, etc.
 
-    pub fn get_events_per_funder(&self, funder: AccountId, limit: Option<u64>, from_index: Option<u64>) -> Vec<ExtEventDetails>{
-        let funder_events: Vec<EventDetails> = self.event_by_id.iter().filter(|x| x.1.funder_id == funder.clone()).map(|x| x.1).collect();
+    pub fn get_events_per_funder(&self, account_id: AccountId, limit: Option<u64>, from_index: Option<u64>) -> Vec<ExtEventDetails>{
+        let funder_events: Vec<EventDetails> = self.event_by_id.iter().filter(|x| x.1.funder_id == account_id.clone()).map(|x| x.1).collect();
         let start = u128::from(from_index.unwrap_or(0));
          // Iterate through each event using an iterator
          funder_events.into_iter()
@@ -24,6 +24,14 @@ impl Marketplace{
          // Since we turned the keys into an iterator, we need to turn it back into a vector to return
          .collect()
     }
+
+    pub fn get_event_supply_for_funder(&self, account_id: AccountId) -> u64 {
+        self.event_by_id.iter().filter(|x| x.1.funder_id == account_id).count() as u64
+    }
+
+    pub fn get_event_supply(&self) -> u64 {
+        self.event_by_id.len() as u64
+    }  
 
     pub fn get_event_information(&self, event_id: EventID) -> ExtEventDetails {
         self.event_by_id.get(&event_id).expect("No Event Found").to_external_event()

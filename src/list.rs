@@ -27,6 +27,10 @@ impl Marketplace {
         // Ensure event with this ID does not already exist
         require!(self.event_by_id.get(&event_id).is_none(), "Event ID already exists!");
 
+        if self.marketplace_balance.get(&funder_id).is_none(){
+            self.marketplace_balance.insert(&funder_id, &0);
+        }
+
         // Ensure drop IDs in max tickets and price_by_drop_id match
         require!(ticket_information.len() > 0);
 

@@ -194,7 +194,6 @@ impl Marketplace {
         drop_id: DropId,
         // for-sale public key inside of memo
         memo: NftTransferMemo,
-        new_public_key: PublicKey,
         new_owner: Option<AccountId>,
     ) {
         self.assert_no_global_freeze();
@@ -211,6 +210,7 @@ impl Marketplace {
         // Ensure deposit will cover ticket price
         let ticket_payment = env::attached_deposit();
         let public_key = memo.linkdrop_pk.clone();
+        let new_public_key = memo.new_public_key.clone();
         let resale_info =  self.resales.get(&drop_id).expect("No resale for drop").get(&public_key).expect("No resale found for key");
         let ticket_price = resale_info.price;
         

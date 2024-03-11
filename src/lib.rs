@@ -85,7 +85,7 @@ pub struct Marketplace {
     /// Event ID given a drop ID
     pub event_by_drop_id: LookupMap<DropId, EventID>,
     /// Collection of keys that have been listed per drop
-    pub resales: UnorderedMap<DropId, UnorderedMap<PublicKey, ResaleInfo>>,
+    pub resales: LookupMap<DropId, UnorderedMap<PublicKey, ResaleInfo>>,
 }
 
 impl Default for Marketplace{
@@ -108,7 +108,7 @@ impl Default for Marketplace{
             marketplace_balance: LookupMap::new(StorageKeys::MarketplaceBalanceByAccountId),
             // **************** By Drop ****************
             event_by_drop_id: LookupMap::new(StorageKeys::EventByDropId),
-            resales: UnorderedMap::new(StorageKeys::ResalesPerDrop),
+            resales: LookupMap::new(StorageKeys::ResalesPerDrop),
         }
     }
 }
@@ -144,7 +144,7 @@ impl Marketplace {
              marketplace_balance: LookupMap::new(StorageKeys::MarketplaceBalanceByAccountId),
              // **************** By Drop ****************
              event_by_drop_id: LookupMap::new(StorageKeys::EventByDropId),
-             resales: UnorderedMap::new(StorageKeys::ResalesPerDrop)
+             resales: LookupMap::new(StorageKeys::ResalesPerDrop)
         }
     }
 

@@ -92,7 +92,7 @@ pub struct ReceivedResaleInfo {
 #[serde(crate = "near_sdk::serde")]
 pub struct NftTransferMemo {
     pub linkdrop_pk: PublicKey,
-    pub signature: Base64VecU8,
+    pub signature: Option<Base64VecU8>,
     pub new_public_key: PublicKey,
 }
 

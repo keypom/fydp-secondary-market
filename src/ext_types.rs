@@ -2,6 +2,8 @@ use crate::*;
 
 impl EventDetails{
     pub fn to_external_event(&self) -> ExtEventDetails{
+        //near_sdk::log!("Self Ticket Info: {:?}", self.ticket_info);
+        
         let mut ticket_info: HashMap<DropId, TicketInfo> = HashMap::new();
         
         for (k, v) in self.ticket_info.iter(){

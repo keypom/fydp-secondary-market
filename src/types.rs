@@ -14,7 +14,7 @@ pub type EventID = String;
 
 
 #[near_bindgen]
-#[derive(BorshDeserialize, BorshSerialize, Serialize, Deserialize, Clone)]
+#[derive(BorshDeserialize, BorshSerialize, Serialize, Deserialize, Clone, Debug)]
 pub struct ResaleInfo {
     pub price: U128,
     pub public_key: PublicKey,
@@ -24,7 +24,7 @@ pub struct ResaleInfo {
     pub drop_id: DropId
 }
 
-#[derive(BorshDeserialize, BorshSerialize, Serialize, Deserialize, Clone, PartialEq)]
+#[derive(BorshDeserialize, BorshSerialize, Serialize, Deserialize, Clone, PartialEq, Debug)]
 #[serde(crate = "near_sdk::serde")]
 pub enum Status {
     Active,
@@ -40,7 +40,7 @@ pub enum ResaleStatus {
 }
 
 
-#[derive(BorshDeserialize, BorshSerialize)]
+#[derive(BorshDeserialize, BorshSerialize, Debug)]
 pub struct EventDetails {
     // Event host, same as drop funders
     pub funder_id: AccountId,
@@ -66,7 +66,7 @@ pub struct ExtEventDetails{
     pub ticket_info: HashMap<DropId, TicketInfo>
 }
 
-#[derive(BorshDeserialize, BorshSerialize, Serialize, Deserialize, Clone)]
+#[derive(BorshDeserialize, BorshSerialize, Serialize, Deserialize, Clone, Debug)]
 pub struct TicketInfo {
     // Maximum number of tickets
     pub max_tickets: Option<u64>,

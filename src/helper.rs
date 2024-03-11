@@ -11,11 +11,14 @@ impl Marketplace{
         ticket_information: HashMap<DropId, TicketInfo>,
     ) -> EventDetails{
 
-        require!(self.event_by_id.get(&event_id).is_none(), "Event ID already exists!");
-        let mut ticket_info: UnorderedMap<DropId, TicketInfo> = UnorderedMap::new(StorageKeys::TicketInfoPerDrop);
+        let identifier_hash = self.hash_string(&event_id);
+        let mut ticket_info: UnorderedMap<DropId, TicketInfo> = UnorderedMap::new(StorageKeys::TicketInfoPerEventInner { identifier_hash });
+        
         for ticket_infos in ticket_information{
+            near_sdk::log!("Inside loop Ticket Info: {:?}", ticket_infos);
             ticket_info.insert(&ticket_infos.0, &ticket_infos.1);
         }
+        
         let event_details = EventDetails{
             funder_id,
             event_id,
@@ -23,6 +26,7 @@ impl Marketplace{
             // unorderedmap from hashmap
             ticket_info,
         };
+
         event_details
     }
 
@@ -36,6 +40,10 @@ impl Marketplace{
         require!(status != Status::NoResales && status != Status::Inactive, "Event resale market is not active");
     }
 
+    pub(crate) fn hash_string(&self, string: &String) -> CryptoHash {
+        env::sha256_array(string.as_bytes())
+    }
+
     pub(crate) fn drop_id_from_token_id(&self, token_id: &TokenId) -> DropId{
         let delimiter = ":";
         let split: Vec<&str> = token_id.split(delimiter).collect();
@@ -43,22 +51,20 @@ impl Marketplace{
         drop_id.to_string()
     }
 
-    pub(crate) fn clamp_price(&self, current_price: U128, drop_id: DropId) -> U128{
+    pub(crate) fn price_check(&self, current_price: U128, drop_id: DropId){
         // Get event and base price
         let event_id = self.event_by_drop_id.get(&drop_id).expect("No event found for drop, cannot set max price");
         let event = self.event_by_id.get(&event_id).expect("No event found for event ID, cannot set max price");
         let base_price = event.ticket_info.get(&drop_id).expect("No base price found for drop, cannot set max price").price;
         
-        // Clamp price
-        let final_price = current_price;
-        let max_price = u128::from(base_price.clone()) * self.max_markup as u128;
+        // divide by 100 to get percentage
+        let max_price = (u128::from(base_price.clone()) * u128::from(self.max_markup))/(100 as u128);
+
+        // Evaluate
+        near_sdk::log!("Received Price: {}, Max Price: {}", u128::from(current_price), max_price);
         if u128::from(current_price).gt(&max_price){
             // price is too high, clamp it to max
-            U128::from(max_price)
-        }else{
-            // price is fine
-            final_price
+            env::panic_str("Price is too high")
         }
     }
-
 }

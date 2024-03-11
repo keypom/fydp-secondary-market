@@ -31,6 +31,20 @@ impl Marketplace {
             self.marketplace_balance.insert(&funder_id, &0);
         }
 
+        // Ensure all prices are greater than base cost per key
+        for ticket_info in ticket_information.values(){
+            require!(u128::from(ticket_info.price) > (self.base_key_storage_size as u128 * env::storage_byte_cost()), "Price for a drop is less than the cost of a key!");
+        }
+
+        // Ensure current balance + attached deposit can cover the cost of all the keys on Keypom contract
+        let total_credit: Balance = self.marketplace_balance.get(&funder_id).unwrap() + env::attached_deposit();
+        let total_tickets = ticket_information.iter().map(|x| x.1.max_tickets.unwrap_or(0)).sum::<u64>();
+        let base_total_key_bytes = self.base_key_storage_size as u128 * total_tickets as u128;
+        let base_total_key_cost = base_total_key_bytes * env::storage_byte_cost();
+
+        near_sdk::log!("User Balance + Attached Deposit: {}, Total Key Storage Cost: {}", total_credit, base_total_key_cost);
+        require!(total_credit > base_total_key_cost, "Attached Deposit and User Balance do not cover cost to create event!");
+
         // Ensure drop IDs in max tickets and price_by_drop_id match
         require!(ticket_information.len() > 0);
 
@@ -55,7 +69,8 @@ impl Marketplace {
         // By Drop ID data structures
         for drop_id in final_event_details.ticket_info.keys() {
             self.event_by_drop_id.insert(&drop_id, &final_event_details.event_id);
-            self.resales.insert(&drop_id, &UnorderedMap::new(StorageKeys::ResaleByPK));
+            let identifier_hash = self.hash_string(&drop_id);
+            self.resales.insert(&drop_id, &UnorderedMap::new(StorageKeys::ResalesPerDropInner{ identifier_hash }));
         }
 
         // Calculate used storage and charge the user
@@ -89,8 +104,8 @@ impl Marketplace {
             require!(!event.ticket_info.keys().collect::<Vec<DropId>>().contains(&drop_id), "Drop already in event!");
         }
 
-        // Update event details
         let mut event = self.event_by_id.get(&event_id).expect("No Event Found");
+        // Update event details
         for ticket_tier_info in ticket_information.iter(){
             event.ticket_info.insert(&ticket_tier_info.0, &ticket_tier_info.1);
         }
@@ -99,7 +114,8 @@ impl Marketplace {
         // Update by drop ID data structures
         for drop_id in ticket_information.keys() {
             self.event_by_drop_id.insert(&drop_id, &event_id);
-            self.resales.insert(&drop_id, &UnorderedMap::new(StorageKeys::ResaleByPK));
+            let identifier_hash = self.hash_string(&drop_id);
+            self.resales.insert(&drop_id, &UnorderedMap::new(StorageKeys::ResalesPerDropInner { identifier_hash }));
         }
 
         let final_storage = env::storage_usage();
@@ -131,9 +147,9 @@ impl Marketplace {
 
         // ~~~~~~~~~~~~~~ BEGIN LISTING PROCESS ~~~~~~~~~~~~~~
         // Clamp price and create resale info object
-        let final_price = self.clamp_price(price, drop_id.clone());
+        self.price_check(price, drop_id.clone());
         let resale_info: ResaleInfo = ResaleInfo{
-            price: final_price,
+            price,
             public_key: key.clone(),
             seller_id: owner_id,
             approval_id: Some(approval_id),
@@ -141,7 +157,14 @@ impl Marketplace {
             drop_id: drop_id.clone(),
         };
 
-        self.resales.get(&drop_id).as_mut().unwrap().insert(&key, &resale_info);
+        near_sdk::log!("Resale Info: {:?}", resale_info);  
+        let mut sale_binding = self.resales.get(&drop_id); 
+        near_sdk::log!("a");
+        let sale = sale_binding.as_mut().unwrap();
+        near_sdk::log!("b");
+        sale.insert(&key, &resale_info);
+        near_sdk::log!("c");
+        self.resales.insert(&drop_id, &sale);
     }
 
     // Add stripe ID to marketplace

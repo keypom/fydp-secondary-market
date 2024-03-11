@@ -18,7 +18,6 @@ impl Marketplace {
         event_id: EventID,
         drop_id: DropId,
         new_keys: Vec<ExtKeyData>,
-        estimated_keypom_deposit: U128
     ) {
         self.assert_no_global_freeze();
         let initial_storage = env::storage_usage();
@@ -29,52 +28,80 @@ impl Marketplace {
 
         let buyer_id = env::predecessor_account_id();
         let stripe_purchase = env::predecessor_account_id() == self.stripe_account;
-        
 
-        // Split deposit into Keypom storage and ticket payment, then ensure ticket payment is sufficient
-        let received_deposit = env::attached_deposit();
-        let keypom_deposit = u128::from(estimated_keypom_deposit.clone());
-        let ticket_payment = received_deposit - keypom_deposit;
-        let binding = self.event_by_id.get(&event_id);
-        let single_ticket_price = binding.as_ref().unwrap().ticket_info.get(&drop_id.to_string()).unwrap().price;
-        let ticket_price = u128::from(single_ticket_price.clone()) * new_keys.len() as u128;
-        
-        // Get a return amount in case of over-payment
-        let return_amount = ticket_payment - ticket_price;
-        
-        // Get Maximum number of tickets
-        let event = self.event_by_id.get(&event_id).unwrap();
-        let max_tickets = event.ticket_info.get(&drop_id.to_string()).unwrap().max_tickets;
-        
-        if !stripe_purchase {
-            require!(ticket_payment.gt(&u128::from(ticket_price.clone())), "Attached Deposit minus Keypom storage costs do not cover ticket purchase cost!");
-            near_sdk::log!("Trying to purchase {} Tickets on drop ID {} at price of {} per Ticket", new_keys.len(), drop_id, u128::from(single_ticket_price.clone()));
-            near_sdk::log!("Received paymnet: {}", ticket_payment);
-            near_sdk::log!("Received Keypom Deposit: {}", keypom_deposit);
-        }else{
-            near_sdk::log!("Received Stripe Payment");
-            near_sdk::log!("Trying to purchase {} Tickets on drop ID {} at price of {} per Ticket", new_keys.len(), drop_id, u128::from(single_ticket_price.clone()));
+        // ensure no metadata is too long, to prevent draining funder balance
+        for key in new_keys.iter(){
+            if key.metadata.is_some(){
+                require!(key.metadata.clone().unwrap().len() as u64 <= self.max_metadata_bytes_per_key, "Metadata too long, must be less than 100 characters");
+            }
         }
-        
 
-        let public_keys = new_keys.iter().map(|x| x.public_key.clone()).collect::<Vec<PublicKey>>();
+        // Get payment and ticket price
+        let payment = env::attached_deposit();
+        let event = self.event_by_id.get(&event_id).expect("No event found for event ID");
+        let single_ticket_price = u128::from(event.ticket_info.get(&drop_id.to_string()).unwrap().price);
         
+        // get total key storage cost, to be paid by funder by taking it out of their payout
+        let total_metadata_bytes = new_keys.iter().map(|x| x.metadata.clone().unwrap_or("".to_string()).len() as u64).sum::<u64>();
+        let total_key_storage_bytes = new_keys.len() as u64 * self.base_key_storage_size + total_metadata_bytes;
+        // Total key costs to be decremented from funder payout
+        let mut total_keys_cost = total_key_storage_bytes as u128 * env::storage_byte_cost();
+
+        let mut total_ticket_price = 0 as u128;
+        let mut return_amount = 0;
+        let mut free_ticket = false;
+        
+        // Paid ticket
+        if single_ticket_price.gt(&(0 as u128)){
+            total_ticket_price = single_ticket_price.clone() * new_keys.len() as u128;
+
+            // Check if payment covers ticket price
+            if !stripe_purchase {
+                near_sdk::log!("Received Payment: {}, Ticket Total Price {} ", payment.clone(), total_ticket_price.clone());
+                require!(payment.ge(&total_ticket_price.clone()), "Payment does not cover ticket price!");
+
+                require!(total_ticket_price >= total_keys_cost, "Ticket Price cannot be lower than ticket cost! Reduce key metadata or contact event host to increase price");
+
+                near_sdk::log!("Trying to purchase {} Tickets on drop ID {} at price of {} NEAR per Ticket", new_keys.len(), drop_id, u128::from(single_ticket_price.clone()));
+                near_sdk::log!("Received paymnet: {}", payment);
+
+                // Get a return amount in case of over-payment
+                return_amount = payment - total_ticket_price;
+            }else{
+                free_ticket = true;
+                near_sdk::log!("Received Stripe Payment");
+                near_sdk::log!("Trying to purchase {} Tickets on drop ID {} at price of {} NEAR per Ticket", new_keys.len(), drop_id, u128::from(single_ticket_price.clone()));
+                // Assuming Stripe Application fees will cover this
+                total_keys_cost = 0;
+            }
+        } else {
+            // Free Ticket
+            require!(self.marketplace_balance.get(&event.funder_id).unwrap() >= total_keys_cost, "Funder does not have enough balance to cover key storage costs!");
+
+            // Pre-emptively decrement funder balance, then re-increment if add keys fails
+            let funder_balance = self.marketplace_balance.get(&event.funder_id).unwrap();
+            self.marketplace_balance.insert(&event.funder_id, &(funder_balance.clone() - total_keys_cost));
+        }
+
+        near_sdk::log!("Total Key Storage Cost to be passed to Keypom: {}", total_keys_cost);
+                
+        let max_tickets = event.ticket_info.get(&drop_id.to_string()).unwrap().max_tickets;
         // Ticket limit exists, check
         if max_tickets.is_some(){
             ext_keypom::ext(AccountId::try_from(self.keypom_contract.to_string()).unwrap())
             .get_drop_information(drop_id.to_string())
             .then(
                 Self::ext(env::current_account_id())
-                .add_key_pre_check(drop_id.to_string(), new_keys, max_tickets.unwrap(), buyer_id, public_keys, return_amount, event_id.clone(), keypom_deposit, ticket_payment, ticket_price, stripe_purchase)
+                .add_key_pre_check(drop_id.to_string(), new_keys, max_tickets.unwrap(), buyer_id, return_amount, event_id.clone(), total_keys_cost, payment, total_ticket_price, stripe_purchase, free_ticket)
             );
         }else{
             // Get key's drop ID and then event, in order to modify all needed data
             ext_keypom::ext(AccountId::try_from(self.keypom_contract.to_string()).unwrap())
-            .with_attached_deposit(keypom_deposit)
+            .with_attached_deposit(total_keys_cost)
             .add_keys(drop_id.to_string(), new_keys, None)
             .then(
                  Self::ext(env::current_account_id())
-                 .buy_initial_sale_callback(buyer_id, return_amount, event_id.clone(), keypom_deposit, ticket_payment, ticket_price)
+                 .buy_initial_sale_callback(buyer_id, return_amount, event_id.clone(), total_keys_cost, payment, total_ticket_price, free_ticket)
              );
         }
         
@@ -88,31 +115,31 @@ impl Marketplace {
         keys_vec: Vec<ExtKeyData>,
         max_tickets: u64,
         buyer_id: AccountId,
-        public_keys: Vec<PublicKey>,
-        return_amount: u128,
+        return_amount: u128, 
         event_id: EventID,
-        keypom_deposit: u128,
-        ticket_payment: u128,
-        ticket_price: u128,
-        stripe_purchase: bool
+        total_keys_cost: u128,
+        payment: u128,
+        total_ticket_price: u128,
+        stripe_purchase: bool,
+        free_ticket: bool
     ){
         // Parse Response and Check if more tickets can still be sold
         if let PromiseResult::Successful(val) = env::promise_result(0){
             if let Ok(drop_info) = near_sdk::serde_json::from_slice::<ExtDrop>(&val) {
                 let current_tickets = drop_info.next_key_id + 1;
-                if (max_tickets - current_tickets) > public_keys.len() as u64 && !stripe_purchase {
+                if (max_tickets - current_tickets) < keys_vec.len() as u64 && !stripe_purchase {
                     // Maximum number of tickets reached, send deposit back to buyer
                     near_sdk::log!("Maximum Number of tickets reached!");
-                    near_sdk::log!("Maximim Tickets: {}, Current Tickets: {}, Tried to add {} tickets", max_tickets, current_tickets, public_keys.len());
+                    near_sdk::log!("Maximim Tickets: {}, Current Tickets: {}, Tried to add {} tickets", max_tickets, current_tickets, keys_vec.len());
                 }else{
                     // Add keys with Keypom Deposit
                     ext_keypom::ext(AccountId::try_from(self.keypom_contract.to_string()).unwrap())
-                    .with_attached_deposit(keypom_deposit)
+                    .with_attached_deposit(total_keys_cost)
                     .add_keys(drop_id.to_string(), keys_vec, None)
                     .then(
                          Self::ext(env::current_account_id())
                          // send price and marketplace storage cost as args
-                         .buy_initial_sale_callback(buyer_id, return_amount, event_id.clone(), keypom_deposit, ticket_payment, ticket_price)
+                         .buy_initial_sale_callback(buyer_id, return_amount, event_id.clone(), total_keys_cost, payment, total_ticket_price, free_ticket)
                      );
                 }
             } else {
@@ -130,9 +157,10 @@ impl Marketplace {
         buyer_id: AccountId,
         return_amount: u128,
         event_id: EventID,
-        keypom_deposit: u128,
-        ticket_payment: u128,
-        ticket_price: u128,
+        total_keys_cost: u128,
+        payment: u128,
+        total_ticket_price: u128,
+        free_ticket: bool
     ) -> Promise {
         // Add keys will panic if it fails
         if let PromiseResult::Successful(_val) = env::promise_result(0) {
@@ -140,11 +168,20 @@ impl Marketplace {
             let funder = self.event_by_id.get(&event_id).unwrap().funder_id;
             near_sdk::log!("Add Key Successful, transferring funds to funder and refunding excess to buyer");
             Promise::new(buyer_id).transfer(return_amount);
-            Promise::new(funder).transfer(ticket_price).as_return()
+            Promise::new(funder).transfer(total_ticket_price - total_keys_cost).as_return()
         }
         else{
             near_sdk::log!("Add Key Failed on Keypom Contract, refunding to buyer");
-            Promise::new(buyer_id).transfer(ticket_payment + keypom_deposit).as_return()
+            
+            // If the ticket was free, re-incrment funder balance
+            if free_ticket {
+                let event = self.event_by_id.get(&event_id).unwrap();
+                let funder_balance = self.marketplace_balance.get(&event.funder_id).unwrap();
+                self.marketplace_balance.insert(&event.funder_id, &(funder_balance.clone() + total_keys_cost));
+            }
+            
+            // Refund buyer
+            Promise::new(buyer_id).transfer(payment).as_return()
         }
           
     }
@@ -178,7 +215,7 @@ impl Marketplace {
         let ticket_price = resale_info.price;
         
         if !stripe_purchase {
-            require!(ticket_payment.gt(&u128::from(ticket_price.clone())), "Not enough attached deposit to resale ticket!");
+            require!(ticket_payment.ge(&u128::from(ticket_price.clone())), "Not enough attached deposit to resale ticket!");
         }
         
         require!(new_public_key != public_key, "New and old key cannot be the same");

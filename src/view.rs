@@ -59,7 +59,7 @@ impl Marketplace{
         let drops = event.ticket_info.keys();
         let mut all_resales: Vec<ResaleInfo> = Vec::new();
         for drop in drops{
-            let resales = self.resales.get(&drop).unwrap_or(UnorderedMap::new(StorageKeys::ResaleByPK));
+            let resales = self.resales.get(&drop).unwrap_or(UnorderedMap::new(StorageKeys::ResalesPerDrop));
             for resale in resales.iter() {
                 all_resales.push(resale.1);
             }
@@ -71,7 +71,6 @@ impl Marketplace{
     pub fn get_all_resales(&self) -> Vec<Vec<ResaleInfo>> {
         let all_event_id = self.get_event_ids();
         let mut all_resales: Vec<Vec<ResaleInfo>> = Vec::new();
-        near_sdk::log!("all event id {:?}", all_event_id);
         for event_id in all_event_id {
             let resales = self.get_resales_per_event(event_id).expect("Get resales per event returning None");
             all_resales.push(resales);

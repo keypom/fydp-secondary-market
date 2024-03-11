@@ -101,7 +101,7 @@ impl Marketplace {
 
         // update prices, make sure new price map covers all drops in event
         let mut event = self.event_by_id.get(&event_id).expect("No Event Found");
-        let mut ticket_info: UnorderedMap<DropId, TicketInfo> = UnorderedMap::new(StorageKeys::TicketInfoPerDrop);
+        let mut ticket_info: UnorderedMap<DropId, TicketInfo> = UnorderedMap::new(StorageKeys::TicketInfoPerEvent);
         for ticket_infos in new_ticket_info{
             ticket_info.insert(&ticket_infos.0, &ticket_infos.1);
         }

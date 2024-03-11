@@ -17,8 +17,8 @@ impl Marketplace {
         if let Some(mut resale) = self.resales.get(&drop_id).expect("No resales for Drop found").get(&public_key) {
             require!(resale.seller_id == env::predecessor_account_id(), "Must own the access key being modified!");
             // Get resale, then modify price
-            let final_price = self.clamp_price(new_resale_price, resale.drop_id.clone());
-            resale.price = final_price;
+            self.price_check(new_resale_price, resale.drop_id.clone());
+            resale.price = new_resale_price;
             self.resales.get(&drop_id).as_mut().expect("No resales for Drop found").insert(&public_key, &resale);
         } else {
             env::panic_str("Key Resale does not exist!");

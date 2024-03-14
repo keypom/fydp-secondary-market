@@ -33,7 +33,10 @@ impl Marketplace {
 
         // Ensure all prices are greater than base cost per key
         for ticket_info in ticket_information.values(){
-            require!(u128::from(ticket_info.price) > (self.base_key_storage_size as u128 * env::storage_byte_cost()), "Price for a drop is less than the cost of a key!");
+            // only check if not free
+            if ticket_info.price.0 > u128::from(0 as u64) {
+                require!(u128::from(ticket_info.price) > (self.base_key_storage_size as u128 * env::storage_byte_cost()), "Price for a drop is less than the cost of a key!");
+            }
         }
 
         // Ensure current balance + attached deposit can cover the cost of all the keys on Keypom contract

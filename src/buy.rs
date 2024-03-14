@@ -15,14 +15,13 @@ impl Marketplace {
     #[payable]
     pub fn buy_initial_sale(
         &mut self,
-        event_id: EventID,
         drop_id: DropId,
         new_keys: Vec<ExtKeyData>,
     ) {
         self.assert_no_global_freeze();
         let initial_storage = env::storage_usage();
         near_sdk::log!("initial bytes {}", initial_storage);
-
+        let event_id = self.event_by_drop_id.get(&drop_id).expect("No event found for drop");
         // Ensure event is active
         self.assert_event_active(&event_id);
 
@@ -72,10 +71,11 @@ impl Marketplace {
                 near_sdk::log!("Received Stripe Payment");
                 near_sdk::log!("Trying to purchase {} Tickets on drop ID {} at price of {} NEAR per Ticket", new_keys.len(), drop_id, u128::from(single_ticket_price.clone()));
                 // Assuming Stripe Application fees will cover this
-                total_keys_cost = 0;
+                total_keys_cost = new_keys.len() as u128 * self.base_key_storage_size as u128 * env::storage_byte_cost();
             }
         } else {
             // Free Ticket
+            free_ticket = true;
             require!(self.marketplace_balance.get(&event.funder_id).unwrap() >= total_keys_cost, "Funder does not have enough balance to cover key storage costs!");
 
             // Pre-emptively decrement funder balance, then re-increment if add keys fails
@@ -126,7 +126,7 @@ impl Marketplace {
         // Parse Response and Check if more tickets can still be sold
         if let PromiseResult::Successful(val) = env::promise_result(0){
             if let Ok(drop_info) = near_sdk::serde_json::from_slice::<ExtDrop>(&val) {
-                let current_tickets = drop_info.next_key_id + 1;
+                let current_tickets = drop_info.next_key_id;
                 if (max_tickets - current_tickets) < keys_vec.len() as u64 && !stripe_purchase {
                     // Maximum number of tickets reached, send deposit back to buyer
                     near_sdk::log!("Maximum Number of tickets reached!");
@@ -167,8 +167,13 @@ impl Marketplace {
             // refund excess to buyer and send ticket price to funder
             let funder = self.event_by_id.get(&event_id).unwrap().funder_id;
             near_sdk::log!("Add Key Successful, transferring funds to funder and refunding excess to buyer");
-            Promise::new(buyer_id).transfer(return_amount);
-            Promise::new(funder).transfer(total_ticket_price - total_keys_cost).as_return()
+            if !free_ticket {
+                Promise::new(buyer_id).transfer(return_amount);
+                Promise::new(funder).transfer(total_ticket_price - total_keys_cost).as_return()
+            }else{
+                near_sdk::log!("Free Ticket, no need to transfer anything");
+                Promise::new(funder).transfer(0).as_return()
+            }
         }
         else{
             near_sdk::log!("Add Key Failed on Keypom Contract, refunding to buyer");

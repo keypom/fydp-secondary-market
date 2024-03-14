@@ -49,31 +49,41 @@ impl Marketplace{
         }
     }
 
+    
+
     pub fn get_stripe_enabled_events(&self) -> Vec<EventID> {
         self.event_by_id.iter().filter(|x| self.stripe_id_per_account.contains_key(&x.1.funder_id)).map(|x| x.1.event_id).collect()
     }
 
+    pub fn get_max_tickets_for_drop(&self, drop_id: DropId) -> u64 {
+        let event_id = self.event_by_drop_id.get(&drop_id).expect("No event found for drop");
+        self.event_by_id.get(&event_id).expect("No event found for event").ticket_info.get(&drop_id).expect("No ticket info found for drop").max_tickets.unwrap_or(u64::MAX)
+    }
+
+    pub fn get_resales_per_drop(&self, drop_id: DropId) -> Vec<ResaleInfo> {
+        let identifier_hash = self.hash_string(&drop_id);
+        self.resales.get(&drop_id).unwrap_or(UnorderedMap::new(StorageKeys::ResalesPerDropInner { identifier_hash })).iter().map(|x| x.1).collect()
+    }
+
     // get all resales (ticket, price, approval ID) for an event, can be empty
-    pub fn get_resales_per_event(&self, event_id: EventID) -> Option<Vec<ResaleInfo>> {
+    pub fn get_resales_per_event(&self, event_id: EventID) -> Option<HashMap<DropId, Vec<ResaleInfo>>> {
         let event = self.event_by_id.get(&event_id).expect("No Event Found for Event ID");
         let drops = event.ticket_info.keys();
-        let mut all_resales: Vec<ResaleInfo> = Vec::new();
-        for drop in drops{
-            let resales = self.resales.get(&drop).unwrap_or(UnorderedMap::new(StorageKeys::ResalesPerDrop));
-            for resale in resales.iter() {
-                all_resales.push(resale.1);
-            }
+        let mut all_resales: HashMap<DropId, Vec<ResaleInfo>> = HashMap::new();
+        for drop_id in drops{
+            let drop_resales = self.get_resales_per_drop(drop_id.clone());
+            all_resales.insert(drop_id.clone(), drop_resales.clone());
         }
         Some(all_resales)
     }
 
     // All resales on the contract, sorted by event
-    pub fn get_all_resales(&self) -> Vec<Vec<ResaleInfo>> {
+    pub fn get_all_resales(&self) -> HashMap<EventID, HashMap<DropId, Vec<ResaleInfo>>> {
         let all_event_id = self.get_event_ids();
-        let mut all_resales: Vec<Vec<ResaleInfo>> = Vec::new();
+        let mut all_resales: HashMap<EventID, HashMap<DropId, Vec<ResaleInfo>>> = HashMap::new();
         for event_id in all_event_id {
-            let resales = self.get_resales_per_event(event_id).expect("Get resales per event returning None");
-            all_resales.push(resales);
+            let resales = self.get_resales_per_event(event_id.clone()).expect("get_resales_per_event returning None somehow");
+            all_resales.insert(event_id.clone(), resales);
         }
         all_resales
     }

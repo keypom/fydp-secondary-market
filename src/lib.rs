@@ -1,46 +1,46 @@
 #![allow(unused_imports)]
 
-pub mod models;
-pub mod buy;
 pub mod balance;
+pub mod buy;
 pub mod costs;
 pub mod ext_traits;
 pub mod ext_types;
 pub mod helper;
 pub mod list;
+pub mod models;
 pub mod modify_event;
 pub mod modify_resales;
 pub mod owner;
 pub mod types;
 pub mod view;
 
-pub use models::*;
-pub use buy::*;
 pub use balance::*;
+pub use buy::*;
 pub use costs::*;
 pub use ext_traits::*;
 pub use ext_types::*;
 pub use helper::*;
 pub use list::*;
+pub use models::*;
 pub use modify_event::*;
 pub use modify_resales::*;
 pub use owner::*;
 pub use types::*;
 pub use view::*;
 
-
-
-use near_sdk::collections::{LookupMap, UnorderedSet, UnorderedMap};
-use types::*;
-use models::*;
 use ext_traits::ext_keypom;
+use models::*;
 use near_sdk::borsh::{self, BorshDeserialize, BorshSerialize};
-use near_sdk::{log, near_bindgen, AccountId, Gas, env, Promise, PromiseResult, require, Balance, CryptoHash};
+use near_sdk::collections::{LookupMap, UnorderedMap, UnorderedSet};
+use near_sdk::json_types::{Base64VecU8, U128};
 use near_sdk::serde::{Deserialize, Serialize};
 use near_sdk::PublicKey;
+use near_sdk::{
+    env, log, near_bindgen, require, AccountId, Balance, CryptoHash, Gas, Promise, PromiseResult,
+};
+use std::collections::{HashMap, HashSet};
 use std::convert::TryFrom;
-use std::collections::{HashSet, HashMap};
-use near_sdk::json_types::{U128, Base64VecU8};
+use types::*;
 
 pub const XCC_GAS: Gas = Gas(20_000_000_000_000);
 pub const TGAS: u64 = 1_000_000_000_000;
@@ -67,7 +67,7 @@ pub struct Marketplace {
     pub stripe_account: AccountId,
     /// Maximum metadata length per key, in bytes
     pub max_metadata_bytes_per_key: u64,
-    
+
     /// **************** Keypom ****************
     pub keypom_contract: AccountId,
 
@@ -88,9 +88,9 @@ pub struct Marketplace {
     pub resales: LookupMap<DropId, UnorderedMap<PublicKey, ResaleInfo>>,
 }
 
-impl Default for Marketplace{
-    fn default() -> Self{
-        Self{
+impl Default for Marketplace {
+    fn default() -> Self {
+        Self {
             /// **************** Admin Stuff ****************
             contract_owner_id: AccountId::try_from("minqi.testnet".to_string()).unwrap(),
             global_freeze: false,
@@ -100,7 +100,8 @@ impl Default for Marketplace{
             max_metadata_bytes_per_key: u64::MAX,
             stripe_account: AccountId::try_from("mintlu.testnet".to_string()).unwrap(),
             /// **************** Keypom ****************
-            keypom_contract: AccountId::try_from("testing-nearcon-keypom.testnet".to_string()).unwrap(),
+            keypom_contract: AccountId::try_from("testing-nearcon-keypom.testnet".to_string())
+                .unwrap(),
             // **************** By Event ID ****************
             event_by_id: UnorderedMap::new(StorageKeys::EventInfoPerID),
             // **************** By Account ****************
@@ -113,11 +114,8 @@ impl Default for Marketplace{
     }
 }
 
-
-
 #[near_bindgen]
 impl Marketplace {
-
     #[init]
     pub fn new(
         keypom_contract: Option<String>,
@@ -127,63 +125,75 @@ impl Marketplace {
         base_key_storage_size: Option<u64>,
     ) -> Self {
         Self {
-             /// **************** Admin Stuff ****************
-             contract_owner_id: AccountId::try_from(contract_owner.unwrap_or("minqi.testnet".to_string())).unwrap(),
-             global_freeze: false,
-             max_markup: 150, // 1.5x markup
-             base_key_storage_size: base_key_storage_size.unwrap_or(1500),
-             // TODO: REFINE THIS
-             max_metadata_bytes_per_key: max_metadata_bytes.unwrap_or(u64::MAX),
-             stripe_account: AccountId::try_from(stripe_account.unwrap_or("kp-market-stripe.testnet".to_string())).unwrap(),
-             /// **************** Keypom ****************
-             keypom_contract: AccountId::try_from(keypom_contract.unwrap_or("1709145182592-kp-ticketing.testnet".to_string())).unwrap(),
-             // **************** By Event ID ****************
-             event_by_id: UnorderedMap::new(StorageKeys::EventInfoPerID),
-             // **************** By Account ****************
-             stripe_id_per_account: LookupMap::new(StorageKeys::StripeByAccountId),
-             marketplace_balance: LookupMap::new(StorageKeys::MarketplaceBalanceByAccountId),
-             // **************** By Drop ****************
-             event_by_drop_id: LookupMap::new(StorageKeys::EventByDropId),
-             resales: LookupMap::new(StorageKeys::ResalesPerDrop)
+            /// **************** Admin Stuff ****************
+            contract_owner_id: AccountId::try_from(
+                contract_owner.unwrap_or("minqi.testnet".to_string()),
+            )
+            .unwrap(),
+            global_freeze: false,
+            max_markup: 150, // 1.5x markup
+            base_key_storage_size: base_key_storage_size.unwrap_or(1500),
+            // TODO: REFINE THIS
+            max_metadata_bytes_per_key: max_metadata_bytes.unwrap_or(512),
+            stripe_account: AccountId::try_from(
+                stripe_account.unwrap_or("kp-market-stripe.testnet".to_string()),
+            )
+            .unwrap(),
+            /// **************** Keypom ****************
+            keypom_contract: AccountId::try_from(
+                keypom_contract.unwrap_or("1709145182592-kp-ticketing.testnet".to_string()),
+            )
+            .unwrap(),
+            // **************** By Event ID ****************
+            event_by_id: UnorderedMap::new(StorageKeys::EventInfoPerID),
+            // **************** By Account ****************
+            stripe_id_per_account: LookupMap::new(StorageKeys::StripeByAccountId),
+            marketplace_balance: LookupMap::new(StorageKeys::MarketplaceBalanceByAccountId),
+            // **************** By Drop ****************
+            event_by_drop_id: LookupMap::new(StorageKeys::EventByDropId),
+            resales: LookupMap::new(StorageKeys::ResalesPerDrop),
         }
     }
 
     /// Helper function to make sure there isn't a global freeze on the contract
     pub(crate) fn assert_no_global_freeze(&self) {
         if env::predecessor_account_id() != self.contract_owner_id {
-            require!(self.global_freeze == false, "Contract is frozen and no new drops or keys can be created");
+            require!(
+                self.global_freeze == false,
+                "Contract is frozen and no new drops or keys can be created"
+            );
         }
     }
 
     #[private]
-    pub fn change_keypom_contract(&mut self, new_contract: AccountId){
+    pub fn change_keypom_contract(&mut self, new_contract: AccountId) {
         self.keypom_contract = new_contract
     }
 
     #[private]
-    pub fn change_stripe_account(&mut self, new_account: AccountId){
+    pub fn change_stripe_account(&mut self, new_account: AccountId) {
         self.stripe_account = new_account
     }
 
     #[private]
-    pub fn change_base_key_cost(&mut self, new_key_size: u64){
+    pub fn change_base_key_cost(&mut self, new_key_size: u64) {
         self.base_key_storage_size = new_key_size
     }
 
     #[private]
-    pub fn change_max_metadata_bytes(&mut self, new_max: u64){
+    pub fn change_max_metadata_bytes(&mut self, new_max: u64) {
         self.max_metadata_bytes_per_key = new_max
     }
 
-    pub fn view_base_key_cost(&self) -> u64{
+    pub fn view_base_key_cost(&self) -> u64 {
         self.base_key_storage_size
     }
 
-    pub fn view_max_metadata_bytes(&self) -> u64{
+    pub fn view_max_metadata_bytes(&self) -> u64 {
         self.max_metadata_bytes_per_key
     }
 
-    pub fn view_keypom_contract(&self) -> AccountId{
+    pub fn view_keypom_contract(&self) -> AccountId {
         self.keypom_contract.clone()
     }
 }

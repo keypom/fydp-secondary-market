@@ -12,7 +12,6 @@ pub type TokenId = String;
 /// The ID for a given event (this is the unique identifier for the drop and is how it will be referenced)
 pub type EventID = String;
 
-
 #[near_bindgen]
 #[derive(BorshDeserialize, BorshSerialize, Serialize, Deserialize, Clone, Debug)]
 pub struct ResaleInfo {
@@ -21,7 +20,7 @@ pub struct ResaleInfo {
     pub seller_id: AccountId,
     pub approval_id: Option<u64>,
     pub event_id: EventID,
-    pub drop_id: DropId
+    pub drop_id: DropId,
 }
 
 #[derive(BorshDeserialize, BorshSerialize, Serialize, Deserialize, Clone, PartialEq, Debug)]
@@ -39,7 +38,6 @@ pub enum ResaleStatus {
     Inactive,
 }
 
-
 #[derive(BorshDeserialize, BorshSerialize, Debug)]
 pub struct EventDetails {
     // Event host, same as drop funders
@@ -50,11 +48,11 @@ pub struct EventDetails {
     // Event Status, can only be active or inactive
     pub status: Status,
     // Sale Information
-    pub ticket_info: UnorderedMap<DropId, TicketInfo>
+    pub ticket_info: UnorderedMap<DropId, TicketInfo>,
 }
 
 #[derive(BorshDeserialize, BorshSerialize, Serialize, Deserialize, Clone)]
-pub struct ExtEventDetails{
+pub struct ExtEventDetails {
     // Event host, same as drop funders
     pub funder_id: AccountId,
     // Event ID, in case on needing to abstract on contract to multiple drops per event
@@ -63,7 +61,7 @@ pub struct ExtEventDetails{
     // Event Status, can only be active or inactive
     pub status: Status,
     // Sale Information
-    pub ticket_info: HashMap<DropId, TicketInfo>
+    pub ticket_info: HashMap<DropId, TicketInfo>,
 }
 
 #[derive(BorshDeserialize, BorshSerialize, Serialize, Deserialize, Clone, Debug)]
@@ -72,13 +70,17 @@ pub struct TicketInfo {
     pub max_tickets: Option<u64>,
     // Tiered Pricing?
     pub price: U128,
+    // Sale start time in Unix epoch nanoseconds
+    pub sale_start: Option<u64>,
+    // Sale end time in Unix epoch nanoseconds
+    pub sale_end: Option<u64>,
 }
 
 #[derive(BorshDeserialize, BorshSerialize, Serialize, Deserialize, Clone)]
 #[serde(crate = "near_sdk::serde")]
-pub struct OwnedTicket{
+pub struct OwnedTicket {
     pub public_key: PublicKey,
-    pub event_id: EventID
+    pub event_id: EventID,
 }
 
 #[derive(BorshDeserialize, BorshSerialize, Serialize, Deserialize, Clone)]
@@ -129,27 +131,27 @@ pub struct ExtKeyData {
     /// Metadata for the given key represented as a string. Most often, this will be JSON stringified.
     pub metadata: Option<String>,
     /// What account ID owns the given key (if any)
-    pub key_owner: Option<AccountId>
+    pub key_owner: Option<AccountId>,
 }
 
 #[derive(BorshSerialize, BorshDeserialize, Serialize, Deserialize)]
 #[serde(crate = "near_sdk::serde")]
 pub struct ExtKeyInfo {
     /// How much Gas should be attached when the key is used to call `claim` or `create_account_and_claim`.
-   /// It is up to the smart contract developer to calculate the required gas (which can be done either automatically on the contract or on the client-side).
-   pub required_gas: String,
+    /// It is up to the smart contract developer to calculate the required gas (which can be done either automatically on the contract or on the client-side).
+    pub required_gas: String,
 
-   /// yoctoNEAR$ amount that will be sent to the account that claims the linkdrop (either new or existing)
-   /// when the key is successfully used.
-   pub yoctonear: U128,
+    /// yoctoNEAR$ amount that will be sent to the account that claims the linkdrop (either new or existing)
+    /// when the key is successfully used.
+    pub yoctonear: U128,
 
-   /* CUSTOM */
-   pub drop_id: DropId,
-   pub pub_key: PublicKey,
-   pub token_id: TokenId,
-   pub owner_id: AccountId,
-   
-   pub uses_remaining: UseNumber
+    /* CUSTOM */
+    pub drop_id: DropId,
+    pub pub_key: PublicKey,
+    pub token_id: TokenId,
+    pub owner_id: AccountId,
+
+    pub uses_remaining: UseNumber,
 }
 
 #[derive(Serialize, Deserialize)]
@@ -211,5 +213,6 @@ pub struct KeypomInjectedArgs {
 pub enum UserArgsRule {
     AllUser,
     FunderPreferred,
-    UserPreferred
+    UserPreferred,
 }
+

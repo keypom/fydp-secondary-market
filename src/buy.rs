@@ -345,6 +345,8 @@ impl Marketplace {
                 seller_id,
                 u128::from(ticket_price),
                 ticket_payment,
+                drop_id,
+                public_key.clone()
             ));
     }
 
@@ -355,9 +357,15 @@ impl Marketplace {
         seller_id: AccountId,
         ticket_price: u128,
         ticket_payment: u128,
+        drop_id: DropId,
+        old_public_key: PublicKey,
     ) -> Promise {
         if let PromiseResult::Successful(_val) = env::promise_result(0) {
             // Transfer ticket price to seller and excess to buyer
+            let mut sale_binding = self.resales.get(&drop_id); 
+            let sale = sale_binding.as_mut().unwrap();
+            sale.remove(&old_public_key);
+            self.resales.insert(&drop_id, &sale);
             near_sdk::log!(
                 "Add Key Successful, transferring funds to funder and refunding excess to buyer"
             );

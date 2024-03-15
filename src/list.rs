@@ -229,11 +229,8 @@ impl Marketplace {
 
         near_sdk::log!("Resale Info: {:?}", resale_info);
         let mut sale_binding = self.resales.get(&drop_id);
-        near_sdk::log!("a");
         let sale = sale_binding.as_mut().unwrap();
-        near_sdk::log!("b");
         sale.insert(&key, &resale_info);
-        near_sdk::log!("c");
         self.resales.insert(&drop_id, &sale);
     }
 

@@ -29,6 +29,7 @@ impl Marketplace {
         self.assert_event_active(&event_id);
 
         let buyer_id = env::predecessor_account_id();
+        let stripe_purchase = env::predecessor_account_id() == self.stripe_account;
 
         // ensure no metadata is too long, to prevent draining funder balance
         for key in new_keys.iter() {
@@ -68,30 +69,40 @@ impl Marketplace {
         if single_ticket_price.gt(&(0 as u128)) {
             total_ticket_price = single_ticket_price.clone() * new_keys.len() as u128;
 
-            near_sdk::log!(
-                "Received Payment: {}, Ticket Total Price {} ",
-                payment.clone(),
-                total_ticket_price.clone()
-            );
+            // Check if payment covers ticket price
+            if !stripe_purchase {
+                near_sdk::log!(
+                    "Received Payment: {}, Ticket Total Price {} ",
+                    payment.clone(),
+                    total_ticket_price.clone()
+                );
+                require!(
+                    payment.ge(&total_ticket_price.clone()),
+                    "Payment does not cover ticket price!"
+                );
 
-            require!(
-                payment.ge(&total_ticket_price.clone()),
-                "Payment does not cover ticket price!"
-            );
+                require!(total_ticket_price >= total_keys_cost, "Ticket Price cannot be lower than ticket cost! Reduce key metadata or contact event host to increase price");
 
-            require!(total_ticket_price >= total_keys_cost, "Ticket Price cannot be lower than ticket cost! Reduce key metadata or contact event host to increase price");
-            
-            near_sdk::log!(
-                "Trying to purchase {} Tickets on drop ID {} at price of {} NEAR per Ticket",
-                new_keys.len(),
-                drop_id,
-                u128::from(single_ticket_price.clone())
-            );
+                near_sdk::log!(
+                    "Trying to purchase {} Tickets on drop ID {} at price of {} NEAR per Ticket",
+                    new_keys.len(),
+                    drop_id,
+                    u128::from(single_ticket_price.clone())
+                );
+                near_sdk::log!("Received paymnet: {}", payment);
 
-            near_sdk::log!("Received paymnet: {}", payment);
-
-            // Get a return amount in case of over-payment
-            return_amount = payment - total_ticket_price;
+                // Get a return amount in case of over-payment
+                return_amount = payment - total_ticket_price;
+            } else {
+                free_ticket = true;
+                near_sdk::log!("Received Stripe Payment");
+                near_sdk::log!(
+                    "Trying to purchase {} Tickets on drop ID {} at price of {} NEAR per Ticket",
+                    new_keys.len(),
+                    drop_id,
+                    u128::from(single_ticket_price.clone())
+                );
+            }
         } else {
             // Free Ticket
             free_ticket = true;
@@ -132,6 +143,7 @@ impl Marketplace {
                     total_keys_cost,
                     payment,
                     total_ticket_price,
+                    stripe_purchase,
                     free_ticket,
                 ));
         } else {
@@ -166,13 +178,14 @@ impl Marketplace {
         total_keys_cost: u128,
         payment: u128,
         total_ticket_price: u128,
+        stripe_purchase: bool,
         free_ticket: bool,
     ) {
         // Parse Response and Check if more tickets can still be sold
         if let PromiseResult::Successful(val) = env::promise_result(0) {
             if let Ok(drop_info) = near_sdk::serde_json::from_slice::<ExtDrop>(&val) {
                 let current_tickets = drop_info.next_key_id;
-                if (max_tickets - current_tickets) < keys_vec.len() as u64 {
+                if (max_tickets - current_tickets) < keys_vec.len() as u64 && !stripe_purchase {
                     // Maximum number of tickets reached, send deposit back to buyer
                     near_sdk::log!("Maximum Number of tickets reached!");
                     near_sdk::log!(
@@ -289,6 +302,7 @@ impl Marketplace {
         self.assert_resales_active(&event_id);
 
         let buyer_id = env::predecessor_account_id();
+        let stripe_purchase = env::predecessor_account_id() == self.stripe_account;
 
         // Ensure deposit will cover ticket price
         let ticket_payment = env::attached_deposit();
@@ -302,10 +316,12 @@ impl Marketplace {
             .expect("No resale found for key");
         let ticket_price = resale_info.price;
 
-        require!(
-            ticket_payment.ge(&u128::from(ticket_price.clone())),
-            "Not enough attached deposit to resale ticket!"
-        );
+        if !stripe_purchase {
+            require!(
+                ticket_payment.ge(&u128::from(ticket_price.clone())),
+                "Not enough attached deposit to resale ticket!"
+            );
+        }
 
         require!(
             new_public_key != public_key,

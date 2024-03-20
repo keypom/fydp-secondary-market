@@ -95,9 +95,9 @@ impl Default for Marketplace {
             contract_owner_id: AccountId::try_from("minqi.testnet".to_string()).unwrap(),
             global_freeze: false,
             max_markup: 150, // 1.5x markup
-            base_key_storage_size: 1500,
+            base_key_storage_size: 684,
             // TODO: REFINE THIS
-            max_metadata_bytes_per_key: u64::MAX,
+            max_metadata_bytes_per_key: 1000,
             stripe_account: AccountId::try_from("mintlu.testnet".to_string()).unwrap(),
             /// **************** Keypom ****************
             keypom_contract: AccountId::try_from("testing-nearcon-keypom.testnet".to_string())
@@ -132,9 +132,9 @@ impl Marketplace {
             .unwrap(),
             global_freeze: false,
             max_markup: 150, // 1.5x markup
-            base_key_storage_size: base_key_storage_size.unwrap_or(1500),
+            base_key_storage_size: base_key_storage_size.unwrap_or(684),
             // TODO: REFINE THIS
-            max_metadata_bytes_per_key: max_metadata_bytes.unwrap_or(512),
+            max_metadata_bytes_per_key: max_metadata_bytes.unwrap_or(684),
             stripe_account: AccountId::try_from(
                 stripe_account.unwrap_or("kp-market-stripe.testnet".to_string()),
             )

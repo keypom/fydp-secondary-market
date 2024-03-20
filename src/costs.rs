@@ -27,12 +27,13 @@ impl Marketplace {
             let storage_freed_cost = storage_freed as u128 * env::storage_byte_cost() as u128;
            
             // Add the freed storage cost and credit to the user's updated balance
-            self.marketplace_balance.insert(&account_id, &(current_user_balance + credit + storage_freed_cost));   
+            self.marketplace_balance.insert(&account_id, &(current_user_balance + credit + storage_freed_cost));      
         }
         // Storage stayed the same
         else{
             // Add the credit to the user's updated balance
             self.marketplace_balance.insert(&account_id, &(current_user_balance + credit));   
         }
+        near_sdk::log!("{} New Balance: {}", account_id, self.marketplace_balance.get(&account_id).unwrap());
     }
 }

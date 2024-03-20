@@ -8,8 +8,6 @@ use crate::*;
 // Implement the contract structure
 #[near_bindgen]
 impl Marketplace {
-    // Frontend must sort drop ID prices for tiers, same with contract side
-
     // Buy Initial Sale Ticket (add_key)
     #[payable]
     pub fn buy_initial_sale(&mut self, drop_id: DropId, new_keys: Vec<ExtKeyData>) {
@@ -59,7 +57,11 @@ impl Marketplace {
         let total_key_storage_bytes =
             new_keys.len() as u64 * self.base_key_storage_size + total_metadata_bytes;
         // Total key costs to be decremented from funder payout
-        let mut total_keys_cost = total_key_storage_bytes as u128 * env::storage_byte_cost();
+        let total_keys_cost = total_key_storage_bytes as u128 * env::storage_byte_cost();
+        near_sdk::log!(
+            "Total Key Storage Cost to be passed to Keypom: {}",
+            total_keys_cost
+        );
 
         let mut total_ticket_price = 0 as u128;
         let mut return_amount = 0;
@@ -94,6 +96,12 @@ impl Marketplace {
                 // Get a return amount in case of over-payment
                 return_amount = payment - total_ticket_price;
             } else {
+                // ensure worker passed in enough NEAR to cover storage
+                require!(
+                    payment.ge(&total_keys_cost),
+                    "Stripe worker attached deposit does not cover key storage price price!"
+                );
+
                 free_ticket = true;
                 near_sdk::log!("Received Stripe Payment");
                 near_sdk::log!(
@@ -118,11 +126,6 @@ impl Marketplace {
                 &(funder_balance.clone() - total_keys_cost),
             );
         }
-
-        near_sdk::log!(
-            "Total Key Storage Cost to be passed to Keypom: {}",
-            total_keys_cost
-        );
 
         let max_tickets = event
             .ticket_info

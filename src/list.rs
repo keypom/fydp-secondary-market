@@ -29,9 +29,9 @@ impl Marketplace {
             "Event ID already exists!"
         );
 
-        if self.marketplace_balance.get(&funder_id).is_none() {
-            self.marketplace_balance.insert(&funder_id, &0);
-        }
+        let mut cur_funder_bal = self.marketplace_balance.get(&funder_id).unwrap_or(0);
+        cur_funder_bal += env::attached_deposit();
+        self.marketplace_balance.insert(&funder_id, &cur_funder_bal);
 
         // Ensure all prices are greater than base cost per key
         for ticket_info in ticket_information.values() {
@@ -44,9 +44,6 @@ impl Marketplace {
             }
         }
 
-        // Ensure current balance + attached deposit can cover the cost of all the keys on Keypom contract
-        let total_credit: Balance =
-            self.marketplace_balance.get(&funder_id).unwrap() + env::attached_deposit();
         // Only charge the funder for the free ticket costs
         let total_free_tickets = ticket_information
             .values()
@@ -59,13 +56,13 @@ impl Marketplace {
         let base_total_key_cost = base_total_key_bytes * env::storage_byte_cost();
 
         near_sdk::log!(
-            "User Balance + Attached Deposit: {}, Total Key Storage Cost: {}",
-            total_credit,
+            "User Balance + Attached Deposit: {}, Total Upfront Key Storage Cost: {}",
+            cur_funder_bal,
             base_total_key_cost
         );
         require!(
-            total_credit > base_total_key_cost,
-            "Attached Deposit and User Balance do not cover cost to create event!"
+            cur_funder_bal > base_total_key_cost,
+            "Attached Deposit and User Balance do not cover upfront cost to create event!"
         );
 
         // Ensure drop IDs in max tickets and price_by_drop_id match
@@ -108,12 +105,12 @@ impl Marketplace {
             );
         }
 
-        // Calculate used storage and charge the user
+        // base_total_key_bytes will be 0 if there are no free tickets
         self.charge_storage(
             initial_storage,
-            env::storage_usage(),
-            env::attached_deposit(),
-            funder_id,
+            env::storage_usage() + base_total_key_bytes as u64,
+            0,
+            funder_id.clone(),
         );
 
         event_id

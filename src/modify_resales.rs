@@ -11,6 +11,8 @@ impl Marketplace {
         self.assert_no_global_freeze();
         let event_id = self.event_by_drop_id.get(&drop_id).expect("No event found for drop, cannot revoke resale");
         self.assert_resales_active(&event_id);
+        // Ensure sale time is valid
+        self.assert_valid_sale_time(&drop_id);
         let initial_storage = env::storage_usage();
         near_sdk::log!("initial bytes {}", initial_storage);
 
@@ -36,6 +38,8 @@ impl Marketplace {
         self.assert_no_global_freeze();
         let event_id = self.event_by_drop_id.get(&drop_id).expect("No event found for drop, cannot revoke resale");
         self.assert_resales_active(&event_id);
+        // Ensure sale time is valid
+        self.assert_valid_sale_time(&drop_id);
         let initial_storage = env::storage_usage();
         near_sdk::log!("initial bytes {}", initial_storage);
 

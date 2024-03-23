@@ -35,6 +35,19 @@ impl Marketplace{
         require!(self.event_by_id.get(event_id).unwrap().status != Status::Inactive, "Event is not active");
     }
 
+    pub(crate) fn assert_valid_sale_time(&self, drop_id: &DropId){
+        let current_time_ns: u64 = env::block_timestamp();
+        let current_time_ms: u64 = current_time_ns / 1_000_000 as u64;
+
+        let event_id = self.event_by_drop_id.get(drop_id).expect("No Event Found");
+
+        let start_time = self.event_by_id.get(&event_id).expect("No Event Found").ticket_info.get(drop_id).expect("No Ticket Info Found").sale_start.unwrap_or(0);
+        require!(current_time_ms >= start_time, "Sale has not started yet");
+
+        let end_time = self.event_by_id.get(&event_id).expect("No Event Found").ticket_info.get(drop_id).expect("No Ticket Info Found").sale_end.unwrap_or(u64::MAX);
+        require!(current_time_ms <= end_time, "Sale has ended");
+    }
+
     pub(crate) fn assert_resales_active(&self, event_id: &EventID){
         let status = self.event_by_id.get(event_id).expect("No Event Found").status;
         require!(status != Status::NoResales && status != Status::Inactive, "Event resale market is not active");

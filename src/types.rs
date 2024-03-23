@@ -73,9 +73,9 @@ pub struct TicketInfo {
     pub max_tickets: Option<u64>,
     // Tiered Pricing?
     pub price: U128,
-    // Sale start time in Unix epoch nanoseconds
+    // Sale start time in Unix epoch milliseconds
     pub sale_start: Option<u64>,
-    // Sale end time in Unix epoch nanoseconds
+    // Sale end time in Unix epoch milliseconds
     pub sale_end: Option<u64>,
 }
 

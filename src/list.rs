@@ -42,6 +42,13 @@ impl Marketplace {
                     "Price for a drop is less than the cost of a key!"
                 );
             }
+
+            if ticket_info.sale_start.is_some() && ticket_info.sale_end.is_some() {
+                require!(
+                    ticket_info.sale_start.unwrap() < ticket_info.sale_end.unwrap(),
+                    "Start time must be before end time!"
+                );
+            }
         }
 
         // Only charge the funder for the free ticket costs
@@ -143,6 +150,24 @@ impl Marketplace {
         // Ensure all drops are not already in event
         let event = self.event_by_id.get(&event_id).expect("No Event Found");
 
+         // Ensure all prices are greater than base cost per key
+         for ticket_info in ticket_information.values() {
+            // only check if not free
+            if ticket_info.price.0 > u128::from(0 as u64) {
+                require!(
+                    ticket_info.price.0 > (100_000_000_000_000_000_000_000),
+                    "Price for a drop is less than the cost of a key!"
+                );
+            }
+
+            if ticket_info.sale_start.is_some() && ticket_info.sale_end.is_some() {
+                require!(
+                    ticket_info.sale_start.unwrap() < ticket_info.sale_end.unwrap(),
+                    "Start time must be before end time!"
+                );
+            }
+        }
+
         for drop_id in ticket_information.keys() {
             require!(
                 !event
@@ -206,6 +231,10 @@ impl Marketplace {
 
         // Require the key to be associated with an event
         let drop_id = self.drop_id_from_token_id(&token_id);
+
+        // Ensure sale time is valid
+        self.assert_valid_sale_time(&drop_id);
+
         let event_id = self
             .event_by_drop_id
             .get(&drop_id)

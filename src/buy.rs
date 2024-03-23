@@ -14,17 +14,22 @@ impl Marketplace {
         self.assert_no_global_freeze();
         let initial_storage = env::storage_usage();
         near_sdk::log!("initial bytes {}", initial_storage);
+
+        // Ensure sale time is valid
+        self.assert_valid_sale_time(&drop_id);
+        
         let event_id = self
             .event_by_drop_id
             .get(&drop_id)
             .expect("No event found for drop");
 
+        // Ensure event is active
+        self.assert_event_active(&event_id);
+
         let event = self
             .event_by_id
             .get(&event_id)
             .expect("No event found for event ID");
-        // Ensure event is active
-        self.assert_event_active(&event_id);
 
         let buyer_id = env::predecessor_account_id();
         let stripe_purchase = env::predecessor_account_id() == self.stripe_account;
@@ -304,11 +309,16 @@ impl Marketplace {
         let initial_storage = env::storage_usage();
         near_sdk::log!("initial bytes {}", initial_storage);
 
+        // Ensure sale time is valid
+        self.assert_valid_sale_time(&drop_id);
+
         // Parse msg to get transfer information
         let event_id = self
             .event_by_drop_id
             .get(&drop_id)
             .expect("No event found for drop");
+        
+        // Assert resales still active
         self.assert_resales_active(&event_id);
 
         let buyer_id = env::predecessor_account_id();

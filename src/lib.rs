@@ -69,7 +69,10 @@ pub struct Marketplace {
     pub max_metadata_bytes_per_key: u64,
 
     /// **************** Keypom ****************
+    /// Ticketing Contract
     pub keypom_contract: AccountId,
+    /// V2 Contact, for linkdrops
+    pub v2_keypom_contract: AccountId,
 
     /// **************** By Event ID ****************
     /// Event/Drop Information per Drop
@@ -102,6 +105,8 @@ impl Default for Marketplace {
             /// **************** Keypom ****************
             keypom_contract: AccountId::try_from("testing-nearcon-keypom.testnet".to_string())
                 .unwrap(),
+            v2_keypom_contract: AccountId::try_from("v2.keypom.testnet".to_string())
+                .unwrap(),
             // **************** By Event ID ****************
             event_by_id: UnorderedMap::new(StorageKeys::EventInfoPerID),
             // **************** By Account ****************
@@ -119,6 +124,7 @@ impl Marketplace {
     #[init]
     pub fn new(
         keypom_contract: Option<String>,
+        v2_keypom_contract: Option<String>,
         stripe_account: Option<String>,
         contract_owner: Option<String>,
         max_metadata_bytes: Option<u64>,
@@ -142,6 +148,10 @@ impl Marketplace {
             /// **************** Keypom ****************
             keypom_contract: AccountId::try_from(
                 keypom_contract.unwrap_or("1709145182592-kp-ticketing.testnet".to_string()),
+            )
+            .unwrap(),
+            v2_keypom_contract: AccountId::try_from(
+                v2_keypom_contract.unwrap_or("v2.keypom.testnet".to_string()),
             )
             .unwrap(),
             // **************** By Event ID ****************
@@ -171,6 +181,11 @@ impl Marketplace {
     }
 
     #[private]
+    pub fn change_v2_keypom_contract(&mut self, new_contract: AccountId) {
+        self.v2_keypom_contract = new_contract
+    }
+
+    #[private]
     pub fn change_stripe_account(&mut self, new_account: AccountId) {
         self.stripe_account = new_account
     }
@@ -195,5 +210,9 @@ impl Marketplace {
 
     pub fn view_keypom_contract(&self) -> AccountId {
         self.keypom_contract.clone()
+    }
+
+    pub fn view_v2_keypom_contract(&self) -> AccountId {
+        self.v2_keypom_contract.clone()
     }
 }

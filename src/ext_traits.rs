@@ -20,6 +20,12 @@ trait ExtKeypom{
     fn get_drop_information(&self, drop_id: DropId) -> ExtDrop;
 }
 
+#[ext_contract(ext_v2_keypom)]
+trait ExtV2Keypom{
+    fn create_drop(&mut self, public_keys: Option<Vec<PublicKey>>, deposit_per_use: U128, drop_id: Option<DropIdJson>) -> Option<DropIdJson>;
+}
+
+
 // #[ext_contract(ext_self)]
 // trait ContractExt{
 //     fn get_roles_callback(&self);

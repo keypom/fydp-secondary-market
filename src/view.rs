@@ -104,6 +104,10 @@ impl Marketplace{
         self.stripe_id_per_account.get(&account_id)
     }
 
+    pub fn get_user_balance(&self, account_id: AccountId) -> U128 {
+        near_sdk::json_types::U128(self.marketplace_balance.get(&account_id).unwrap_or(0))
+    }
+
     // get all event details
     pub fn get_events(&self, limit: Option<u64>, from_index: Option<u64>) -> Vec<ExtEventDetails> {
         let start = u128::from(from_index.unwrap_or(0));

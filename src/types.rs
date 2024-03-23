@@ -12,6 +12,9 @@ pub type TokenId = String;
 /// The ID for a given event (this is the unique identifier for the drop and is how it will be referenced)
 pub type EventID = String;
 
+// v2 drop ID
+pub type DropIdJson = U128;
+
 #[near_bindgen]
 #[derive(BorshDeserialize, BorshSerialize, Serialize, Deserialize, Clone, Debug)]
 pub struct ResaleInfo {

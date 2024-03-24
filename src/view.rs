@@ -7,6 +7,14 @@ impl Marketplace{
     pub fn get_max_markup(&self) -> u64 {
         self.max_markup
     }
+
+    pub fn get_max_resale_for_drop(&self, drop_id: DropId) -> U128 {
+        let event_id = self.event_by_drop_id.get(&drop_id).expect("No event found for drop");
+        let base_price = self.event_by_id.get(&event_id).expect("No event found for event").ticket_info.get(&drop_id).expect("No ticket info found for drop").price;
+        let max_markup = self.max_markup;
+        let max_price = (u128::from(base_price.clone()) * u128::from(max_markup))/(100 as u128);
+        U128(max_price)
+    }
     
     // View calls -> all events/drops, filter by funder, get event info, get owner, keypom constract, resale price per pk, resales per event, etc.
 

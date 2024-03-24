@@ -123,9 +123,16 @@ impl Marketplace {
         } else {
             // Free Ticket
             free_ticket = true;
+
             require!(
                 self.marketplace_balance.get(&event.funder_id).unwrap() >= total_keys_cost,
                 "Funder does not have enough balance to cover key storage costs!"
+            );
+
+            // Only worker can purchase free tickets, to help prevent scalping of free tickets
+            require!(
+                env::predecessor_account_id() == self.stripe_account,
+                "Free tickets can only be purchased by the worker account!"
             );
 
             // Pre-emptively decrement funder balance, then re-increment if add keys fails

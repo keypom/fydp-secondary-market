@@ -229,6 +229,8 @@ impl Marketplace {
         let price = received_resale_info.price;
         let key = received_resale_info.public_key;
 
+        require!((price.0 * 10) > 1, "Resale price cannot be lower than 0.1 NEAR");
+
         // Require the key to be associated with an event
         let drop_id = self.drop_id_from_token_id(&token_id);
 

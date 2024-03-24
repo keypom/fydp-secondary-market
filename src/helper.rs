@@ -70,14 +70,19 @@ impl Marketplace{
         let event = self.event_by_id.get(&event_id).expect("No event found for event ID, cannot set max price");
         let base_price = event.ticket_info.get(&drop_id).expect("No base price found for drop, cannot set max price").price;
         
-        // divide by 100 to get percentage
-        let max_price = (u128::from(base_price.clone()) * u128::from(self.max_markup))/(100 as u128);
+        let calculated_max_price = (u128::from(base_price.clone()) * u128::from(self.max_markup))/(100 as u128);
+
+        // Max price is 0.1 NEAR minimum
+        let adjusted_max_price = U128::max(
+            U128::from(calculated_max_price), 
+            U128::from(100_000_000_000_000_000_000_000)
+        );
 
         // Evaluate
-        near_sdk::log!("Received Price: {}, Max Price: {}", u128::from(current_price), max_price);
-        if u128::from(current_price).gt(&max_price){
+        near_sdk::log!("Received Price: {}, Max Price: {}", u128::from(current_price), adjusted_max_price.0);
+        if u128::from(current_price).gt(&adjusted_max_price.0){
             // price is too high, clamp it to max
-            env::panic_str("Price is too high")
+            env::panic_str("Resale price is too high")
         }
     }
 }

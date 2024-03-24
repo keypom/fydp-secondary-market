@@ -11,6 +11,10 @@ impl Marketplace{
     pub fn get_max_resale_for_drop(&self, drop_id: DropId) -> U128 {
         let event_id = self.event_by_drop_id.get(&drop_id).expect("No event found for drop");
         let base_price = self.event_by_id.get(&event_id).expect("No event found for event").ticket_info.get(&drop_id).expect("No ticket info found for drop").price;
+        if base_price == U128(0){
+            // 0.1 NEAR is max resale for free tickets
+            return U128(100_000_000_000_000_000_000_000);
+        }
         let max_markup = self.max_markup;
         let max_price = (u128::from(base_price.clone()) * u128::from(max_markup))/(100 as u128);
         U128(max_price)
@@ -56,8 +60,6 @@ impl Marketplace{
             ("".to_string(), "".to_string())
         }
     }
-
-    
 
     pub fn get_stripe_enabled_events(&self) -> Vec<EventID> {
         self.event_by_id.iter().filter(|x| self.stripe_id_per_account.contains_key(&x.1.funder_id)).map(|x| x.1.event_id).collect()

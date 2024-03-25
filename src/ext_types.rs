@@ -15,6 +15,7 @@ impl EventDetails{
             event_id: self.event_id.clone(),
             status: self.status.clone(),
             ticket_info,
+            stripe_status: self.stripe_status.clone()
         }
     }
 }

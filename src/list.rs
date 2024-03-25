@@ -14,6 +14,8 @@ impl Marketplace {
         event_id: EventID,
         // Host
         funder_id: AccountId,
+        // Event stripe status
+        stripe_status: bool,
         // Host Strip ID
         stripe_id: Option<String>,
         // Associated drops, prices, and max tickets for each. If None, assume unlimited tickets for that drop
@@ -95,7 +97,7 @@ impl Marketplace {
         }
 
         let final_event_details =
-            self.create_event_details(event_id.clone(), funder_id.clone(), ticket_information);
+            self.create_event_details(event_id.clone(), funder_id.clone(), ticket_information, stripe_status);
 
         // Insert by event ID stuff first
         self.event_by_id

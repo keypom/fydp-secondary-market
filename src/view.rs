@@ -50,19 +50,12 @@ impl Marketplace{
     }
 
     // Get drop's stripe information, if it exists. Allows frontend to expose stripe payment method
-    pub fn event_stripe_status(&self, event_id: EventID) -> (String, String){
-        let funder = self.event_by_id.get(&event_id).expect("No Event Found").funder_id;
-        if self.stripe_id_per_account.contains_key(&funder){
-            let stripe_id = self.stripe_id_per_account.get(&funder).unwrap();
-            (stripe_id.clone(), funder.to_string())
-        }else{
-            // return blank tuple
-            ("".to_string(), "".to_string())
-        }
+    pub fn event_stripe_status(&self, event_id: EventID) -> bool {
+         self.event_by_id.get(&event_id).expect("No Event Found").stripe_status.clone()
     }
 
     pub fn get_stripe_enabled_events(&self) -> Vec<EventID> {
-        self.event_by_id.iter().filter(|x| self.stripe_id_per_account.contains_key(&x.1.funder_id)).map(|x| x.1.event_id).collect()
+        self.event_by_id.iter().filter(|x| x.1.stripe_status).map(|x| x.1.event_id).collect()
     }
 
     pub fn get_max_tickets_for_drop(&self, drop_id: DropId) -> u64 {

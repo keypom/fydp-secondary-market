@@ -9,6 +9,7 @@ impl Marketplace{
         event_id: EventID,
         funder_id: AccountId,
         ticket_information: HashMap<DropId, TicketInfo>,
+        stripe_status: bool
     ) -> EventDetails{
 
         let identifier_hash = self.hash_string(&event_id);
@@ -25,6 +26,7 @@ impl Marketplace{
             status: Status::Active,
             // unorderedmap from hashmap
             ticket_info,
+            stripe_status
         };
 
         event_details

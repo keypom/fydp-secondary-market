@@ -52,6 +52,8 @@ pub struct EventDetails {
     pub status: Status,
     // Sale Information
     pub ticket_info: UnorderedMap<DropId, TicketInfo>,
+    // Stripe status -> can this event accept stripe payments for primary sales?
+    pub stripe_status: bool,
 }
 
 #[derive(BorshDeserialize, BorshSerialize, Serialize, Deserialize, Clone)]
@@ -65,6 +67,8 @@ pub struct ExtEventDetails {
     pub status: Status,
     // Sale Information
     pub ticket_info: HashMap<DropId, TicketInfo>,
+    // Stripe status -> can this event accept stripe payments for primary sales?
+    pub stripe_status: bool,
 }
 
 #[derive(BorshDeserialize, BorshSerialize, Serialize, Deserialize, Clone, Debug)]

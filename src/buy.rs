@@ -34,12 +34,12 @@ impl Marketplace {
         let buyer_id = env::predecessor_account_id();
         let stripe_purchase = env::predecessor_account_id() == self.stripe_account;
 
-        if stripe_purchase {
-            require!(
-                event.stripe_status,
-                "Event does not accept stripe payments for primary sales!"
-            );
-        }
+        // if stripe_purchase {
+        //     require!(
+        //         event.stripe_status,
+        //         "Event does not accept stripe payments for primary sales!"
+        //     );
+        // }
 
         // ensure no metadata is too long, to prevent draining funder balance
         for key in new_keys.iter() {

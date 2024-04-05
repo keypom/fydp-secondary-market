@@ -17,7 +17,7 @@ impl Marketplace {
         // Event stripe status
         stripe_status: bool,
         // Host Strip ID
-        stripe_id: Option<String>,
+        stripe_account_id: Option<String>,
         // Associated drops, prices, and max tickets for each. If None, assume unlimited tickets for that drop
         ticket_information: HashMap<DropId, TicketInfo>,
     ) -> EventID {
@@ -78,21 +78,22 @@ impl Marketplace {
         require!(ticket_information.len() > 0);
 
         // Insert new stripe ID, or ensure current one is valid
-        if stripe_id.is_some() {
+        if stripe_account_id.is_some() {
+            //near_sdk::log!("Stripe ID : {}", stripe_id.unwrap());
             if self
                 .stripe_id_per_account
-                .contains_key(&env::predecessor_account_id())
+                .contains_key(&env::signer_account_id())
             {
                 require!(
                     self.stripe_id_per_account
-                        .get(&env::predecessor_account_id())
+                        .get(&env::signer_account_id())
                         .unwrap()
-                        == stripe_id.unwrap(),
+                        == stripe_account_id.unwrap(),
                     "Stripe ID does not match existing Stripe ID for this account!"
                 );
             } else {
                 self.stripe_id_per_account
-                    .insert(&env::predecessor_account_id(), &stripe_id.unwrap());
+                    .insert(&env::signer_account_id(), &stripe_account_id.unwrap());
             }
         }
 

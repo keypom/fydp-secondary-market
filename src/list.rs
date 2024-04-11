@@ -40,7 +40,7 @@ impl Marketplace {
             // only check if not free
             if ticket_info.price.0 > u128::from(0 as u64) {
                 require!(
-                    ticket_info.price.0 > (100_000_000_000_000_000_000_000),
+                    ticket_info.price.0 >= (100_000_000_000_000_000_000_000),
                     "Price for a drop is less than the cost of a key!"
                 );
             }

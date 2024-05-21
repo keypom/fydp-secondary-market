@@ -95,17 +95,17 @@ impl Default for Marketplace {
     fn default() -> Self {
         Self {
             /// **************** Admin Stuff ****************
-            contract_owner_id: AccountId::try_from("minqi.testnet".to_string()).unwrap(),
+            contract_owner_id: AccountId::try_from("keypom.near".to_string()).unwrap(),
             global_freeze: false,
             max_markup: 150, // 1.5x markup
             base_key_storage_size: 684,
             // TODO: REFINE THIS
             max_metadata_bytes_per_key: 1000,
-            stripe_account: AccountId::try_from("mintlu.testnet".to_string()).unwrap(),
+            stripe_account: AccountId::try_from("marketplace-stripe-v1.keypom.near".to_string()).unwrap(),
             /// **************** Keypom ****************
-            keypom_contract: AccountId::try_from("testing-nearcon-keypom.testnet".to_string())
+            keypom_contract: AccountId::try_from("ticketing-v1.keypom.near".to_string())
                 .unwrap(),
-            v2_keypom_contract: AccountId::try_from("v2.keypom.testnet".to_string())
+            v2_keypom_contract: AccountId::try_from("v2.keypom.near".to_string())
                 .unwrap(),
             // **************** By Event ID ****************
             event_by_id: UnorderedMap::new(StorageKeys::EventInfoPerID),
@@ -133,7 +133,7 @@ impl Marketplace {
         Self {
             /// **************** Admin Stuff ****************
             contract_owner_id: AccountId::try_from(
-                contract_owner.unwrap_or("minqi.testnet".to_string()),
+                contract_owner.unwrap_or("keypom.near".to_string()),
             )
             .unwrap(),
             global_freeze: false,
@@ -142,16 +142,16 @@ impl Marketplace {
             // TODO: REFINE THIS
             max_metadata_bytes_per_key: max_metadata_bytes.unwrap_or(1000),
             stripe_account: AccountId::try_from(
-                stripe_account.unwrap_or("kp-market-stripe.testnet".to_string()),
+                stripe_account.unwrap_or("marketplace-stripe-v1.keypom.near".to_string()),
             )
             .unwrap(),
             /// **************** Keypom ****************
             keypom_contract: AccountId::try_from(
-                keypom_contract.unwrap_or("1709145182592-kp-ticketing.testnet".to_string()),
+                keypom_contract.unwrap_or("ticketing-v1.keypom.near".to_string()),
             )
             .unwrap(),
             v2_keypom_contract: AccountId::try_from(
-                v2_keypom_contract.unwrap_or("v2.keypom.testnet".to_string()),
+                v2_keypom_contract.unwrap_or("v2.keypom.near".to_string()),
             )
             .unwrap(),
             // **************** By Event ID ****************

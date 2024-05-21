@@ -38,7 +38,9 @@ impl Marketplace {
         // Ensure all prices are greater than base cost per key
         for ticket_info in ticket_information.values() {
             // only check if not free
+            near_sdk::log!("Price: {}", ticket_info.price.0);
             if ticket_info.price.0 > u128::from(0 as u64) {
+                near_sdk::log!("Evaluating: {}", ticket_info.price.0);
                 require!(
                     ticket_info.price.0 >= (100_000_000_000_000_000_000_000),
                     "Price for a drop is less than the cost of a key!"

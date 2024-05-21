@@ -14,9 +14,17 @@ trait ExtKeypom{
 
     fn nft_token(&self, token_id: TokenId) -> Option<ExtNFTKey>;
 
-    fn nft_transfer(&mut self, token_id: Option<TokenId>, receiver_id: Option<AccountId>, approval_id: Option<u64>, memo: PublicKey);
+    // memo contains NftTrasnferMemo
+    fn nft_transfer(&mut self, receiver_id: Option<AccountId>, approval_id: Option<u64>, memo: String);
 
+    fn get_drop_information(&self, drop_id: DropId) -> ExtDrop;
 }
+
+#[ext_contract(ext_v2_keypom)]
+trait ExtV2Keypom{
+    fn create_drop(&mut self, public_keys: Option<Vec<PublicKey>>, deposit_per_use: U128, drop_id: Option<DropIdJson>) -> Option<DropIdJson>;
+}
+
 
 // #[ext_contract(ext_self)]
 // trait ContractExt{

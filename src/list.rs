@@ -1,3 +1,4 @@
+use near_sdk::store::vec;
 use near_units::near;
 
 use crate::*;
@@ -5,235 +6,284 @@ use crate::*;
 // Implement the contract structure
 #[near_bindgen]
 impl Marketplace {
-
-    // *********** ASSUMING ALL NEW DROPS WITH NO KEYS ***********
-
-    /// List an event
+    /// Create an event, expected call after drop creation succeeds, assuming no keys in those drops
     #[payable]
-    pub fn list_event(
+    pub fn create_event(
         &mut self,
-        // Unique event identifier 
+        // Unique event identifier
         event_id: EventID,
-        // Event Information
-        event_name: Option<String>,
-        description: Option<String>,
-        date: Option<String>,
-        host: Option<AccountId>,
-        // Resale Markup
-        max_markup: u64,
-        // Associated drops, prices, and max tickets for each. If None, assume unlimited tickets for that drop 
-        drop_ids: Option<Vec<DropId>>,
-        max_tickets: Option<HashMap<DropId, Option<u64>>>,
-        price_by_drop_id: Option<HashMap<DropId, U128>>,
-    ){
+        // Host
+        funder_id: AccountId,
+        // Event stripe status
+        stripe_status: bool,
+        // Host Strip ID
+        stripe_account_id: Option<String>,
+        // Associated drops, prices, and max tickets for each. If None, assume unlimited tickets for that drop
+        ticket_information: HashMap<DropId, TicketInfo>,
+    ) -> EventID {
         self.assert_no_global_freeze();
         let initial_storage = env::storage_usage();
         near_sdk::log!("initial bytes {}", initial_storage);
 
-        // If drop_ids provided, prices must be provided as well
-        if drop_ids.is_some(){
-            let received_drop_ids = drop_ids.as_ref().unwrap();
-            let received_price_by_drop_id = price_by_drop_id.as_ref().unwrap();
-            for drop_id in received_drop_ids{
-                require!(received_price_by_drop_id.contains_key(drop_id), "Price not provided for all drops!");
+        // Ensure event with this ID does not already exist
+        require!(
+            self.event_by_id.get(&event_id).is_none(),
+            "Event ID already exists!"
+        );
+
+        let mut cur_funder_bal = self.marketplace_balance.get(&funder_id).unwrap_or(0);
+        cur_funder_bal += env::attached_deposit();
+        self.marketplace_balance.insert(&funder_id, &cur_funder_bal);
+
+        // Ensure all prices are greater than base cost per key
+        for ticket_info in ticket_information.values() {
+            // only check if not free
+            if ticket_info.price.0 > u128::from(0 as u64) {
+                require!(
+                    ticket_info.price.0 >= (100_000_000_000_000_000_000_000),
+                    "Price for a drop is less than the cost of a key!"
+                );
+            }
+
+            if ticket_info.sale_start.is_some() && ticket_info.sale_end.is_some() {
+                require!(
+                    ticket_info.sale_start.unwrap() < ticket_info.sale_end.unwrap(),
+                    "Start time must be before end time!"
+                );
             }
         }
 
-        let final_event_details = self.create_event_details(
-            event_id, 
-            event_name, 
-            description, 
-            date, 
-            host, 
-            max_markup, 
-            max_tickets, 
-            drop_ids, 
-            price_by_drop_id);
+        // Only charge the funder for the free ticket costs
+        let total_free_tickets = ticket_information
+            .values()
+            .filter(|info| info.price.0 == 0)
+            .map(|x| x.max_tickets.unwrap_or(0))
+            .sum::<u64>();
+        let base_total_key_bytes = (self.base_key_storage_size as u128
+            + self.max_metadata_bytes_per_key as u128)
+            * total_free_tickets as u128;
+        let base_total_key_cost = base_total_key_bytes * env::storage_byte_cost();
 
-        // Insert by event ID stuff first
-        self.event_by_id.insert(&final_event_details.event_id, &final_event_details);
-        self.resales_per_event.insert(&final_event_details.event_id, &None);
- 
-        // By Drop ID data structures
-        let stored_drop_ids = final_event_details.drop_ids;
-        for drop_id in stored_drop_ids {
-            self.approved_drops.insert(drop_id.clone());
-            self.event_by_drop_id.insert(&drop_id, &final_event_details.event_id);
-            self.resales_per_drop.insert(&drop_id, &None);
+        near_sdk::log!(
+            "User Balance + Attached Deposit: {}, Total Upfront Key Storage Cost: {}",
+            cur_funder_bal,
+            base_total_key_cost
+        );
+        require!(
+            cur_funder_bal > base_total_key_cost,
+            "Attached Deposit and User Balance do not cover upfront cost to create event!"
+        );
+
+        // Ensure drop IDs in max tickets and price_by_drop_id match
+        require!(ticket_information.len() > 0);
+
+        // Insert new stripe ID, or ensure current one is valid
+        if stripe_account_id.is_some() {
+            //near_sdk::log!("Stripe ID : {}", stripe_id.unwrap());
+            if self
+                .stripe_id_per_account
+                .contains_key(&env::signer_account_id())
+            {
+                require!(
+                    self.stripe_id_per_account
+                        .get(&env::signer_account_id())
+                        .unwrap()
+                        == stripe_account_id.unwrap(),
+                    "Stripe ID does not match existing Stripe ID for this account!"
+                );
+            } else {
+                self.stripe_id_per_account
+                    .insert(&env::signer_account_id(), &stripe_account_id.unwrap());
+            }
         }
 
-        // Calculate used storage and charge the user
-        let net_storage = env::storage_usage() - initial_storage;
-        let storage_cost = net_storage as Balance * env::storage_byte_cost();
+        let final_event_details =
+            self.create_event_details(event_id.clone(), funder_id.clone(), ticket_information, stripe_status);
 
-        self.charge_deposit(near_sdk::json_types::U128(storage_cost));
+        // Insert by event ID stuff first
+        self.event_by_id
+            .insert(&final_event_details.event_id, &final_event_details);
+
+        // By Drop ID data structures
+        for drop_id in final_event_details.ticket_info.keys() {
+            self.event_by_drop_id
+                .insert(&drop_id, &final_event_details.event_id);
+            let identifier_hash = self.hash_string(&drop_id);
+            self.resales.insert(
+                &drop_id,
+                &UnorderedMap::new(StorageKeys::ResalesPerDropInner { identifier_hash }),
+            );
+        }
+
+        // base_total_key_bytes will be 0 if there are no free tickets
+        self.charge_storage(
+            initial_storage,
+            env::storage_usage() + base_total_key_bytes as u64,
+            0,
+            funder_id.clone(),
+        );
+
+        event_id
     }
-    
-    // List a ticket for sale on secondary market
+
+    // TODO: Review
     #[payable]
-    pub fn list_ticket(
+    pub fn add_drops_to_event(
         &mut self,
-        key: ExtKeyData,
-        price: U128,
-        approval_id: u64,
-    ){
+        event_id: EventID,
+        ticket_information: HashMap<DropId, TicketInfo>,
+    ) {
         self.assert_no_global_freeze();
         let initial_storage = env::storage_usage();
         near_sdk::log!("initial bytes {}", initial_storage);
+        self.assert_event_active(&event_id);
 
-        near_sdk::log!("listing key {:?}", serde_json::to_string(&key.public_key));
-        near_sdk::log!("Signer PK {:?}", serde_json::to_string(&env::signer_account_pk()));
-        
-        // Predecessor must own the key, or the marketplace must call list_ticket
-        require!(env::predecessor_account_id() == key.key_owner.clone().unwrap_or(env::current_account_id()), "Must own or use the access key being listed!");
+        // Ensure correct perms
+        require!(self.event_by_id.get(&event_id).is_some(), "No Event Found");
+        require!(
+            self.event_by_id.get(&event_id).unwrap().funder_id == env::predecessor_account_id(),
+            "Must be event host to modify event details!"
+        );
 
-        near_sdk::log!("attached deposit: {}", env::attached_deposit());
+        require!(
+            ticket_information.len() > 0,
+            "No drops provided to add to event!"
+        );
 
-        // Get key's drop ID and then event, in order to modify all needed data
-        ext_keypom::ext(AccountId::try_from(self.keypom_contract.to_string()).unwrap())
-            .get_key_information(String::try_from(&key.public_key).unwrap())
-            .then(
-                 Self::ext(env::current_account_id())
-                 .with_attached_deposit(env::attached_deposit())
-                 .internal_list_ticket(key, price, approval_id, initial_storage)
-             );
-    }
+        // Ensure all drops are not already in event
+        let event = self.event_by_id.get(&event_id).expect("No Event Found");
 
-    #[private] #[payable]
-    pub fn internal_list_ticket(
-        &mut self,
-        key: ExtKeyData,
-        price: U128,
-        approval_id: u64,
-        initial_storage: u64
-    ){
-        
-        // Parse Response to ensure key exists on Keypom first
-        if let PromiseResult::Successful(val) = env::promise_result(0) {
-            // expected result: Result<ExtKeyInfo, String>
-            
-            if let Ok(key_info) = near_sdk::serde_json::from_slice::<ExtKeyInfo>(&val) {
-                // Data structures to update: event_by_id, resales_per_event, resales_per_drop, approval_id_by_pk, resale_per_pk
-                let drop_id = key_info.drop_id;
+         // Ensure all prices are greater than base cost per key
+         for ticket_info in ticket_information.values() {
+            // only check if not free
+            if ticket_info.price.0 > u128::from(0 as u64) {
+                require!(
+                    ticket_info.price.0 > (100_000_000_000_000_000_000_000),
+                    "Price for a drop is less than the cost of a key!"
+                );
+            }
 
-                // Require the key to be associated with an event                
-                let event_id = self.event_by_drop_id.get(&drop_id).expect("Key not associated with any event, cannot list!");
-                let event = self.event_by_id.get(&event_id).expect("No event found for Event ID");
-                
-                // Clamp price using max_markup
-                let mut final_price = price;
-                let base_price = event.price_by_drop_id.get(&drop_id).expect("No base price found for drop, cannot set max price");
-                let max_price = u128::from(base_price.clone()) * event.max_markup as u128;
-                if u128::from(price).gt(&max_price){
-                    final_price = U128::from(max_price);
-                }
-
-                // resale info object
-                let resale_info: StoredResaleInformation = StoredResaleInformation{
-                    price: final_price,
-                    public_key: key.public_key.clone(),
-                    approval_id: Some(approval_id),
-                };
-
-                // Resale per PK
-                self.resale_info_per_pk.insert(&key.public_key, &resale_info);
-
-                // updated listed resales per drop, if drop has no resales, add drop to this resaleInfo
-                if self.resales_per_drop.contains_key(&drop_id){
-                    if self.resales_per_drop.get(&drop_id).as_ref().unwrap().is_none(){
-                        // No existing vector
-                        let mut resale_vec: Vec<StoredResaleInformation> = Vec::new();
-                        resale_vec.push(resale_info.clone());
-                        self.resales_per_drop.insert(&event_id, &Some(resale_vec));
-                    }else{
-                        self.resales_per_drop.get(&drop_id).unwrap().unwrap().push(resale_info.clone());
-                    }
-                }else{
-                    // Create new drop <-> vector pairing
-                    let mut resale_vec: Vec<StoredResaleInformation> = Vec::new();
-                    resale_vec.push(resale_info.clone());
-                    self.resales_per_drop.insert(&drop_id, &Some(resale_vec));
-                }
-
-                // updated resales for event, if drop has no resales, add event to this resaleInfo
-                if self.resales_per_event.contains_key(&event_id){
-                    if self.resales_per_event.get(&event_id).as_ref().unwrap().is_none(){
-                        // No existing vector
-                        let mut resale_vec: Vec<StoredResaleInformation> = Vec::new();
-                        resale_vec.push(resale_info.clone());
-                        self.resales_per_event.insert(&event_id, &Some(resale_vec));
-                    }else{
-                        // Existing vector
-                        self.resales_per_event.get(&event_id).unwrap().unwrap().push(resale_info);
-                    }
-                }else{
-                   // Create new drop <-> vector pairing
-                   let mut resale_vec: Vec<StoredResaleInformation> = Vec::new();
-                   resale_vec.push(resale_info.clone());
-                   self.resales_per_event.insert(&event_id, &Some(resale_vec));
-                }
-            } else {
-             env::panic_str("Could Not Parse KeyInfo")
-            }      
+            if ticket_info.sale_start.is_some() && ticket_info.sale_end.is_some() {
+                require!(
+                    ticket_info.sale_start.unwrap() < ticket_info.sale_end.unwrap(),
+                    "Start time must be before end time!"
+                );
+            }
         }
-        else{
-            env::panic_str("Invalid Key, not found on Keypom Contract!")
-        }  
-        
-        // Calculate used storage and charge the user
-        let net_storage = env::storage_usage() - initial_storage;
-        let storage_cost = net_storage as Balance * env::storage_byte_cost();
-        near_sdk::log!("storage cost {}", storage_cost);
-        near_sdk::log!("attached deposit: {}", env::attached_deposit());
 
-        self.charge_deposit(near_sdk::json_types::U128::from(storage_cost));
-    }
+        for drop_id in ticket_information.keys() {
+            require!(
+                !event
+                    .ticket_info
+                    .keys()
+                    .collect::<Vec<DropId>>()
+                    .contains(&drop_id),
+                "Drop already in event!"
+            );
+        }
 
-
-    // TODO: VERIFY IF ALL NECESSARY DATA STRUCTURES ARE UPDATED HERE
-    // Add drop to an existing event
-    #[payable]
-    pub fn add_drop_to_event(
-        &mut self, 
-        event_id: EventID,
-        added_drops: HashMap<DropId, AddedDropDetails>,
-    ){
-        // Data Structures to update: event_by_id (EventDetails), approved_drops, event_by_drop_id, resales_per_drop
-        // EventDetails fields to update: max_tickets, drop_ids, price_by_drop_ids
-
-        // Ensure no global freeze and event exists
-        self.assert_no_global_freeze();
-        let initial_storage = env::storage_usage();
-        require!(self.event_by_id.get(&event_id).is_some(), "Event not found!");
-        
-
-        // Update event details
         let mut event = self.event_by_id.get(&event_id).expect("No Event Found");
-        let added_drops_vec = added_drops.iter();
-        let mut drop_ids: Vec<String> = Vec::new();
-
-        for (key, val) in added_drops_vec{
-            event.drop_ids.push(key.to_string());
-            event.max_tickets.insert(key.to_string(), val.max_tickets);
-            event.price_by_drop_id.insert(key.to_string(), val.price_by_drop_id);
-            drop_ids.push(key.to_string());
+        // Update event details
+        for ticket_tier_info in ticket_information.iter() {
+            event
+                .ticket_info
+                .insert(&ticket_tier_info.0, &ticket_tier_info.1);
         }
-
         self.event_by_id.insert(&event_id, &event);
 
-        for drop_id in drop_ids {
-            self.approved_drops.insert(drop_id.clone());
+        // Update by drop ID data structures
+        for drop_id in ticket_information.keys() {
             self.event_by_drop_id.insert(&drop_id, &event_id);
-            // if let Some(pub_key) = &existing_keys.as_ref().unwrap().get(&drop_id){
-            //     self.keys_by_drop_id.insert(&drop_id, &Some(pub_key.to_vec()));
-            // }
-            self.resales_per_drop.insert(&drop_id, &None);
+            let identifier_hash = self.hash_string(&drop_id);
+            self.resales.insert(
+                &drop_id,
+                &UnorderedMap::new(StorageKeys::ResalesPerDropInner { identifier_hash }),
+            );
         }
-        
-        // Calculate used storage and charge the user
-        let net_storage = env::storage_usage() - initial_storage;
-        let storage_cost = net_storage as Balance * env::storage_byte_cost();
 
-        self.charge_deposit(near_sdk::json_types::U128(storage_cost));
+        let final_storage = env::storage_usage();
+        self.charge_storage(
+            initial_storage,
+            final_storage,
+            0,
+            env::predecessor_account_id(),
+        );
+    }
+
+    // Listing ticket through NFT Approve
+    pub fn nft_on_approve(
+        &mut self,
+        token_id: TokenId,
+        owner_id: AccountId,
+        approval_id: u64,
+        msg: String,
+    ) {
+        self.assert_no_global_freeze();
+        let initial_storage = env::storage_usage();
+        near_sdk::log!("initial bytes {}", initial_storage);
+        require!(
+            env::predecessor_account_id() == self.keypom_contract,
+            "nft_on_approve be called by Keypom contract using nft_approve!"
+        );
+
+        // Parse msg to get price and public key
+        let received_resale_info: ReceivedResaleInfo = near_sdk::serde_json::from_str(&msg)
+            .expect("Could not parse msg to get resale information");
+        let price = received_resale_info.price;
+        let key = received_resale_info.public_key;
+
+        require!((price.0 * 10) > 1, "Resale price cannot be lower than 0.1 NEAR");
+
+        // Require the key to be associated with an event
+        let drop_id = self.drop_id_from_token_id(&token_id);
+
+        // Ensure sale time is valid
+        self.assert_valid_sale_time(&drop_id);
+
+        let event_id = self
+            .event_by_drop_id
+            .get(&drop_id)
+            .expect("Key not associated with any event, cannot list!");
+        self.assert_resales_active(&event_id);
+
+        // ~~~~~~~~~~~~~~ BEGIN LISTING PROCESS ~~~~~~~~~~~~~~
+        // Clamp price and create resale info object
+        self.price_check(price, drop_id.clone());
+        let resale_info: ResaleInfo = ResaleInfo {
+            price,
+            public_key: key.clone(),
+            seller_id: owner_id,
+            approval_id: Some(approval_id),
+            event_id: event_id.clone(),
+            drop_id: drop_id.clone(),
+        };
+
+        near_sdk::log!("Resale Info: {:?}", resale_info);
+        let mut sale_binding = self.resales.get(&drop_id);
+        let sale = sale_binding.as_mut().unwrap();
+        sale.insert(&key, &resale_info);
+        self.resales.insert(&drop_id, &sale);
+    }
+
+    // Add stripe ID to marketplace
+    #[payable]
+    pub fn register_stripe_id(&mut self, stripe_id: String) {
+        self.assert_no_global_freeze();
+        let initial_storage = env::storage_usage();
+        require!(
+            !self
+                .stripe_id_per_account
+                .contains_key(&env::predecessor_account_id()),
+            "Stripe ID already registered for this account!"
+        );
+        self.stripe_id_per_account
+            .insert(&env::predecessor_account_id(), &stripe_id);
+        self.charge_storage(
+            initial_storage,
+            env::storage_usage(),
+            0,
+            env::predecessor_account_id(),
+        );
     }
 }
+

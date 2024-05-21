@@ -12,47 +12,97 @@ pub type TokenId = String;
 /// The ID for a given event (this is the unique identifier for the drop and is how it will be referenced)
 pub type EventID = String;
 
+// v2 drop ID
+pub type DropIdJson = U128;
 
-#[derive(BorshDeserialize, BorshSerialize, Serialize, Deserialize, Clone)]
-#[serde(crate = "near_sdk::serde")]
-pub struct ResaleConditions {
-    // Maximum markup that a ticket can be listed for, as a %
-    // For example, 1.2x is 120% -> max_markup = 120
-    pub max_markup: u64
+#[near_bindgen]
+#[derive(BorshDeserialize, BorshSerialize, Serialize, Deserialize, Clone, Debug)]
+pub struct ResaleInfo {
+    pub price: U128,
+    pub public_key: PublicKey,
+    pub seller_id: AccountId,
+    pub approval_id: Option<u64>,
+    pub event_id: EventID,
+    pub drop_id: DropId,
 }
 
-#[derive(BorshDeserialize, BorshSerialize, Serialize, Deserialize, Clone)]
+#[derive(BorshDeserialize, BorshSerialize, Serialize, Deserialize, Clone, PartialEq, Debug)]
 #[serde(crate = "near_sdk::serde")]
 pub enum Status {
     Active,
-    Inactive
+    NoResales,
+    Inactive,
 }
 
-#[derive(BorshDeserialize, BorshSerialize, Serialize, Deserialize, Clone)]
+#[derive(BorshDeserialize, BorshSerialize, Serialize, Deserialize, Clone, PartialEq)]
 #[serde(crate = "near_sdk::serde")]
+pub enum ResaleStatus {
+    Active,
+    Inactive,
+}
+
+#[derive(BorshDeserialize, BorshSerialize, Debug)]
 pub struct EventDetails {
-    // Public Facing event name
-    pub name: Option<String>,
-    // Event hosts, not necessarily the same as all the drop funders
-    pub host: AccountId,
+    // Event host, same as drop funders
+    pub funder_id: AccountId,
     // Event ID, in case on needing to abstract on contract to multiple drops per event
     // For now, event ID is drop ID
     pub event_id: String,
     // Event Status, can only be active or inactive
     pub status: Status,
-    // Description
-    pub description: Option<String>,
-    // Date
-    pub date: Option<String>,
-    // Maximum markup, as a %
-    pub max_markup: u64,
+    // Sale Information
+    pub ticket_info: UnorderedMap<DropId, TicketInfo>,
+    // Stripe status -> can this event accept stripe payments for primary sales?
+    pub stripe_status: bool,
+}
+
+#[derive(BorshDeserialize, BorshSerialize, Serialize, Deserialize, Clone)]
+pub struct ExtEventDetails {
+    // Event host, same as drop funders
+    pub funder_id: AccountId,
+    // Event ID, in case on needing to abstract on contract to multiple drops per event
+    // For now, event ID is drop ID
+    pub event_id: String,
+    // Event Status, can only be active or inactive
+    pub status: Status,
+    // Sale Information
+    pub ticket_info: HashMap<DropId, TicketInfo>,
+    // Stripe status -> can this event accept stripe payments for primary sales?
+    pub stripe_status: bool,
+}
+
+#[derive(BorshDeserialize, BorshSerialize, Serialize, Deserialize, Clone, Debug)]
+pub struct TicketInfo {
     // Maximum number of tickets
-    pub max_tickets: HashMap<DropId, Option<u64>>,
-    // Associated Drop IDs
-    // drop - tier link create here, either implicitely through vec or unorderedmap 
-    pub drop_ids: Vec<DropId>,
-    // Tiered Pricing
-    pub price_by_drop_id: HashMap<DropId, U128>,
+    pub max_tickets: Option<u64>,
+    // Tiered Pricing?
+    pub price: U128,
+    // Sale start time in Unix epoch milliseconds
+    pub sale_start: Option<u64>,
+    // Sale end time in Unix epoch milliseconds
+    pub sale_end: Option<u64>,
+}
+
+#[derive(BorshDeserialize, BorshSerialize, Serialize, Deserialize, Clone)]
+#[serde(crate = "near_sdk::serde")]
+pub struct OwnedTicket {
+    pub public_key: PublicKey,
+    pub event_id: EventID,
+}
+
+#[derive(BorshDeserialize, BorshSerialize, Serialize, Deserialize, Clone)]
+#[serde(crate = "near_sdk::serde")]
+pub struct ReceivedResaleInfo {
+    pub price: U128,
+    pub public_key: PublicKey,
+}
+
+#[derive(BorshDeserialize, BorshSerialize, Serialize, Deserialize, Clone)]
+#[serde(crate = "near_sdk::serde")]
+pub struct NftTransferMemo {
+    pub linkdrop_pk: PublicKey,
+    pub signature: Option<Base64VecU8>,
+    pub new_public_key: PublicKey,
 }
 
 #[derive(BorshDeserialize, BorshSerialize, Serialize, Deserialize, Clone)]
@@ -65,6 +115,17 @@ pub struct AddedDropDetails {
     pub price_by_drop_id: U128,
 }
 
+#[derive(BorshDeserialize, BorshSerialize, Serialize, Deserialize, Clone)]
+#[serde(crate = "near_sdk::serde")]
+pub struct ExtDrop {
+    /// ID for this specific drop
+    pub drop_id: DropId,
+    /// Account ID who funded / owns the rights to this specific drop
+    pub funder_id: AccountId,
+
+    /// Keep track of the next nonce to give out to a key
+    pub next_key_id: u64,
+}
 
 #[derive(Serialize, Deserialize, Debug)]
 pub struct ExtKeyData {
@@ -77,68 +138,27 @@ pub struct ExtKeyData {
     /// Metadata for the given key represented as a string. Most often, this will be JSON stringified.
     pub metadata: Option<String>,
     /// What account ID owns the given key (if any)
-    pub key_owner: Option<AccountId>
+    pub key_owner: Option<AccountId>,
 }
 
 #[derive(BorshSerialize, BorshDeserialize, Serialize, Deserialize)]
 #[serde(crate = "near_sdk::serde")]
 pub struct ExtKeyInfo {
     /// How much Gas should be attached when the key is used to call `claim` or `create_account_and_claim`.
-   /// It is up to the smart contract developer to calculate the required gas (which can be done either automatically on the contract or on the client-side).
-   pub required_gas: String,
+    /// It is up to the smart contract developer to calculate the required gas (which can be done either automatically on the contract or on the client-side).
+    pub required_gas: String,
 
-   /// yoctoNEAR$ amount that will be sent to the account that claims the linkdrop (either new or existing)
-   /// when the key is successfully used.
-   pub yoctonear: U128,
+    /// yoctoNEAR$ amount that will be sent to the account that claims the linkdrop (either new or existing)
+    /// when the key is successfully used.
+    pub yoctonear: U128,
 
-   /// If using the FT standard extension, a set of FTData can be linked to the public key
-   /// indicating that all those assets will be sent to the account that claims the linkdrop (either new or
-   /// existing) when the key is successfully used.
-   pub ft_list: Vec<FTListData>, 
-   
-   /// If using the NFT standard extension, a set of NFTData can be linked to the public key
-   /// indicating that all those assets will be sent to the account that claims the linkdrop (either new or
-   /// existing) when the key is successfully used.
-   pub nft_list: Vec<NFTListData>, 
+    /* CUSTOM */
+    pub drop_id: DropId,
+    pub pub_key: PublicKey,
+    pub token_id: TokenId,
+    pub owner_id: AccountId,
 
-   /* CUSTOM */
-   pub drop_id: DropId,
-   pub pub_key: PublicKey,
-   pub token_id: TokenId,
-   pub owner_id: AccountId,
-   pub fc_list: Vec<FCData>,
-   
-   pub uses_remaining: UseNumber
-}
-
-#[derive(BorshSerialize, BorshDeserialize, Serialize, Deserialize, PanicOnDefault, Clone, Debug)]
-#[serde(crate = "near_sdk::serde")]
-pub struct FCData {
-    pub methods: Vec<MethodData>
-}
-
-#[derive(BorshDeserialize, BorshSerialize, Serialize, Deserialize, Clone, Debug)]
-#[serde(crate = "near_sdk::serde")]
-pub struct MethodData {
-    /// Contract that will be called
-    pub receiver_id: String,
-    /// Method to call on receiver_id contract
-    pub method_name: String,
-    /// Arguments to pass in (stringified JSON)
-    pub args: String,
-    /// Amount of yoctoNEAR to attach along with the call
-    pub attached_deposit: U128,
-    /// How much gas to attach to this method call.
-    pub attached_gas: Gas,
-
-    /// Keypom Args struct to be sent to external contracts
-    pub keypom_args: Option<KeypomInjectedArgs>,
-    /// If set to true, the claiming account ID will be the receiver ID of the method call.
-    /// Ths receiver must be a valid account and non-malicious (cannot be set to the keypom contract) 
-    pub receiver_to_claimer: Option<bool>,
-    /// What permissions does the user have when providing custom arguments to the function call?
-    /// By default, the user cannot provide any custom arguments
-    pub user_args_rule: Option<UserArgsRule>,
+    pub uses_remaining: UseNumber,
 }
 
 #[derive(Serialize, Deserialize)]
@@ -191,33 +211,6 @@ pub struct KeypomInjectedArgs {
     pub funder_id_field: Option<String>,
 }
 
-/// Data outlining Fungible Tokens that should be sent to the claiming account
-/// (either new or existing) when a key is successfully used.
-#[derive(BorshSerialize, BorshDeserialize, Serialize, Deserialize)]
-#[serde(crate = "near_sdk::serde")]
-pub struct FTListData {
-    /// The number of tokens to transfer, wrapped in quotes and treated
-    /// like a string, although the number will be stored as an unsigned integer
-    /// with 128 bits.
-    pub amount: String,
-
-    /// The valid NEAR account indicating the Fungible Token contract.
-    pub contract_id: String
-}
-
-
-/// Data outlining a specific Non-Fungible Token that should be sent to the claiming account
-/// (either new or existing) when a key is successfully used.
-#[derive(BorshSerialize, BorshDeserialize, Serialize, Deserialize)]
-#[serde(crate = "near_sdk::serde")]
-pub struct NFTListData {
-    /// the id of the token to transfer
-    pub token_id: String,
-
-    /// The valid NEAR account indicating the Non-Fungible Token contract.
-    pub contract_id: String
-}
-
 #[derive(BorshSerialize, BorshDeserialize, Deserialize, Serialize, Clone, Debug)]
 #[serde(crate = "near_sdk::serde")]
 /// When a user provides arguments for FC drops in `claim` or `create_account_and_claim`, what behaviour is expected?
@@ -227,5 +220,6 @@ pub struct NFTListData {
 pub enum UserArgsRule {
     AllUser,
     FunderPreferred,
-    UserPreferred
+    UserPreferred,
 }
+

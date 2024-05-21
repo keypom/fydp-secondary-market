@@ -2,29 +2,38 @@ use crate::*;
 
 #[near_bindgen]
 impl Marketplace {
-    pub(crate) fn charge_deposit(&mut self, required_deposit: U128) {
-        let predecessor = env::predecessor_account_id();
-        near_sdk::log!("Required cost: {}", near_sdk::Balance::from(required_deposit));
-        require!(env::attached_deposit() >= near_sdk::Balance::from(required_deposit), "Insufficient Attached Deposit");
-
-        let amount_to_refund = env::attached_deposit() - near_sdk::Balance::from(required_deposit);
-
-        near_sdk::log!("Refunding {} excess deposit", amount_to_refund);
-        Promise::new(predecessor).transfer(amount_to_refund);
-        return;
-    }
-
-    pub(crate) fn charge_storage(&mut self, initial_storage: u64, final_storage: u64) {
+    pub(crate) fn charge_storage(&mut self, initial_storage: u64, final_storage: u64, mut credit: u128, account_id: AccountId){
+        // get current user balance, add that to any marketplace balance they may already have
+        let current_user_balance = self.marketplace_balance.get(&account_id).expect("No user balance found in charge_storage");
+        credit = credit + current_user_balance;
+        
+        // Storage was used
         if final_storage > initial_storage {
             let storage_used = final_storage - initial_storage;
-            self.charge_deposit(near_sdk::json_types::U128((storage_used as u128 * env::storage_byte_cost()) as u128));
+            let cost = (storage_used as u128 * env::storage_byte_cost()) as u128;
+            near_sdk::log!("Required Storage Cost: {}, Attached Deposit: {}", cost, credit);
+            // If total storage cost exceeds the attached deposit and marketplace balance, panic
+            if cost.gt(&(credit as u128)) {
+                env::panic_str("Insufficient Attached Deposit and Marketplace Balance")
+            }
+            // else, subtract the cost from the user's updated balance
+            else{
+                self.marketplace_balance.insert(&account_id, &(current_user_balance + credit - cost));    
+            }
         }
+        // Storage was freed
         else if final_storage < initial_storage {
             let storage_freed = initial_storage - final_storage;
-            Promise::new(env::predecessor_account_id()).transfer(storage_freed as u128 * env::storage_byte_cost() as u128).as_return();   
+            let storage_freed_cost = storage_freed as u128 * env::storage_byte_cost() as u128;
+           
+            // Add the freed storage cost and credit to the user's updated balance
+            self.marketplace_balance.insert(&account_id, &(current_user_balance + credit + storage_freed_cost));      
         }
+        // Storage stayed the same
         else{
-            Promise::new(env::predecessor_account_id()).transfer(0).as_return();   
+            // Add the credit to the user's updated balance
+            self.marketplace_balance.insert(&account_id, &(current_user_balance + credit));   
         }
+        near_sdk::log!("{} New Balance: {}", account_id, self.marketplace_balance.get(&account_id).unwrap());
     }
 }

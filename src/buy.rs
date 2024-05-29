@@ -17,7 +17,7 @@ impl Marketplace {
 
         // Ensure sale time is valid
         self.assert_valid_sale_time(&drop_id);
-        
+
         let event_id = self
             .event_by_drop_id
             .get(&drop_id)
@@ -64,18 +64,19 @@ impl Marketplace {
         // get total key storage cost, to be paid by funder by taking it out of their payout
         let total_metadata_bytes = new_keys
             .iter()
-            .map(|x| x.metadata.clone().unwrap_or("".to_string()).len() as u64)
-            .sum::<u64>();
+            .map(|x| x.metadata.clone().unwrap_or("".to_string()).len() as u64);
         let total_key_storage_bytes =
             new_keys.len() as u64 * self.base_key_storage_size + total_metadata_bytes;
         // Total key costs to be decremented from funder payout
-        //30220000000000000000000/23920000000000000000000 = 1.2633779264 --> add 1.5 safety factor on top
-        let total_keys_cost = (total_key_storage_bytes as u128 * env::storage_byte_cost() * 15 as u128)/(10 as u128);
+        // 30220000000000000000000/23920000000000000000000 = 1.2633779264 --> add 1.5 safety factor on top
+        let total_keys_cost =
+            (total_key_storage_bytes as u128 * env::storage_byte_cost() * 15 as u128)
+                / (10 as u128)
+                + KEY_ALLOWANCE_COST * new_keys.len() as u128;
         near_sdk::log!(
             "Total Key Storage Cost to be passed to Keypom: {}",
             total_keys_cost
         );
-
 
         let mut total_ticket_price = 0 as u128;
         let mut return_amount = 0;
@@ -116,7 +117,6 @@ impl Marketplace {
                     payment.ge(&total_keys_cost),
                     "Stripe worker attached deposit does not cover key storage price price!"
                 );
-            
 
                 free_ticket = true;
                 near_sdk::log!("Received Stripe Payment");
@@ -313,11 +313,11 @@ impl Marketplace {
         // TODO: RECONSIDER THIS --> frontend will pass in key and dropId
         drop_id: DropId,
         // for-sale public key inside of memo
-        memo: NftTransferMemo,
+        memo: PublicKey,
         new_owner: Option<AccountId>,
         seller_new_linkdrop_pk: PublicKey,
         // DROP ID EXPECTED TO BE DATE.NOW FROM FRONTEND
-        seller_linkdrop_drop_id: U128
+        seller_linkdrop_drop_id: U128,
     ) {
         self.assert_no_global_freeze();
         let initial_storage = env::storage_usage();
@@ -331,7 +331,7 @@ impl Marketplace {
             .event_by_drop_id
             .get(&drop_id)
             .expect("No event found for drop");
-        
+
         // Assert resales still active
         self.assert_resales_active(&event_id);
 
@@ -340,8 +340,9 @@ impl Marketplace {
 
         // Ensure deposit will cover ticket price
         let ticket_payment = env::attached_deposit();
-        let public_key = memo.linkdrop_pk.clone();
-        let new_public_key = memo.new_public_key.clone();
+        let public_key = env::signer_account_pk();
+
+        let new_public_key = memo.clone();
         let resale_info = self
             .resales
             .get(&drop_id)
@@ -382,7 +383,7 @@ impl Marketplace {
                 drop_id,
                 public_key.clone(),
                 seller_new_linkdrop_pk,
-                seller_linkdrop_drop_id
+                seller_linkdrop_drop_id,
             ));
     }
 
@@ -396,11 +397,11 @@ impl Marketplace {
         drop_id: DropId,
         old_public_key: PublicKey,
         seller_new_linkdrop_pk: PublicKey,
-        seller_linkdrop_drop_id: U128
+        seller_linkdrop_drop_id: U128,
     ) -> Promise {
         if let PromiseResult::Successful(_val) = env::promise_result(0) {
             // Transfer ticket price to seller and excess to buyer
-            let mut sale_binding = self.resales.get(&drop_id); 
+            let mut sale_binding = self.resales.get(&drop_id);
             let sale = sale_binding.as_mut().unwrap();
             sale.remove(&old_public_key);
             self.resales.insert(&drop_id, &sale);
@@ -410,21 +411,22 @@ impl Marketplace {
             let excess_payment = ticket_payment - ticket_price;
             Promise::new(buyer_id).transfer(excess_payment);
 
-            if seller_id != self.keypom_contract{
+            if seller_id != self.keypom_contract {
                 Promise::new(seller_id).transfer(ticket_price).as_return()
-            }else{
+            } else {
                 near_sdk::log!("Seller is Keypom, creating a linkdrop for seller");
                 // ticket price plus 0.05NEAR, estimated 0.03 NEAR
                 let create_drop_deposit = ticket_price + 50_000_000_000_000_000_000_000 as u128;
-                ext_v2_keypom::ext(AccountId::try_from(self.v2_keypom_contract.to_string()).unwrap())
-                    .with_attached_deposit(create_drop_deposit)
-                    .create_drop(
-                        Some(vec![seller_new_linkdrop_pk]), 
-                        U128(ticket_price),
-                        Some(seller_linkdrop_drop_id)
-                    )
-                    .then(Self::ext(env::current_account_id())
-                    .create_linkdrop_callback())
+                ext_v2_keypom::ext(
+                    AccountId::try_from(self.v2_keypom_contract.to_string()).unwrap(),
+                )
+                .with_attached_deposit(create_drop_deposit)
+                .create_drop(
+                    Some(vec![seller_new_linkdrop_pk]),
+                    U128(ticket_price),
+                    Some(seller_linkdrop_drop_id),
+                )
+                .then(Self::ext(env::current_account_id()).create_linkdrop_callback())
             }
         } else {
             // Resale failed, transfer price and keypom deposit (everything) back to buyer
@@ -442,4 +444,3 @@ impl Marketplace {
         }
     }
 }
-

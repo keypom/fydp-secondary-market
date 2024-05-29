@@ -50,6 +50,8 @@ pub struct EventDetails {
     pub event_id: String,
     // Event Status, can only be active or inactive
     pub status: Status,
+    // Maximum resale price for secondary market.
+    pub max_markup: u64,
     // Sale Information
     pub ticket_info: UnorderedMap<DropId, TicketInfo>,
     // Stripe status -> can this event accept stripe payments for primary sales?
@@ -65,6 +67,8 @@ pub struct ExtEventDetails {
     pub event_id: String,
     // Event Status, can only be active or inactive
     pub status: Status,
+    // Maximum resale price for secondary market.
+    pub max_markup: u64,
     // Sale Information
     pub ticket_info: HashMap<DropId, TicketInfo>,
     // Stripe status -> can this event accept stripe payments for primary sales?
@@ -95,14 +99,6 @@ pub struct OwnedTicket {
 pub struct ReceivedResaleInfo {
     pub price: U128,
     pub public_key: PublicKey,
-}
-
-#[derive(BorshDeserialize, BorshSerialize, Serialize, Deserialize, Clone)]
-#[serde(crate = "near_sdk::serde")]
-pub struct NftTransferMemo {
-    pub linkdrop_pk: PublicKey,
-    pub signature: Option<Base64VecU8>,
-    pub new_public_key: PublicKey,
 }
 
 #[derive(BorshDeserialize, BorshSerialize, Serialize, Deserialize, Clone)]
@@ -222,4 +218,3 @@ pub enum UserArgsRule {
     FunderPreferred,
     UserPreferred,
 }
-

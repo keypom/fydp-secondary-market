@@ -45,8 +45,8 @@ use types::*;
 pub const XCC_GAS: Gas = Gas(20_000_000_000_000);
 pub const TGAS: u64 = 1_000_000_000_000;
 
-// 0.1 $NEAR
-pub const SPUTNIK_PROPOSAL_DEPOSIT: Balance = 100000000000000000000000;
+/// 0.01 $NEAR
+pub const KEY_ALLOWANCE_COST: Balance = 10000000000000000000000;
 
 // TODO: VERIFY PUBLIC-KEY VS TOKEN_ID ON KEYPOM SIDE, WHAT IS NEEDED?
 
@@ -61,8 +61,6 @@ pub struct Marketplace {
     pub global_freeze: bool,
     /// Base number of bytes for each key stored
     pub base_key_storage_size: u64,
-    /// Maximum markup price, used to calculate resale ceiling upon event creation, in percentage (200 = 2x markup, 100 = 1x markup, etc.)
-    pub max_markup: u64,
     /// Stripe account
     pub stripe_account: AccountId,
     /// Maximum metadata length per key, in bytes
@@ -97,16 +95,14 @@ impl Default for Marketplace {
             /// **************** Admin Stuff ****************
             contract_owner_id: AccountId::try_from("keypom.near".to_string()).unwrap(),
             global_freeze: false,
-            max_markup: 150, // 1.5x markup
             base_key_storage_size: 684,
             // TODO: REFINE THIS
             max_metadata_bytes_per_key: 1000,
-            stripe_account: AccountId::try_from("marketplace-stripe-v1.keypom.near".to_string()).unwrap(),
+            stripe_account: AccountId::try_from("marketplace-stripe-v1.keypom.near".to_string())
+                .unwrap(),
             /// **************** Keypom ****************
-            keypom_contract: AccountId::try_from("ticketing-v1.keypom.near".to_string())
-                .unwrap(),
-            v2_keypom_contract: AccountId::try_from("v2.keypom.near".to_string())
-                .unwrap(),
+            keypom_contract: AccountId::try_from("ticketing-v1.keypom.near".to_string()).unwrap(),
+            v2_keypom_contract: AccountId::try_from("v2.keypom.near".to_string()).unwrap(),
             // **************** By Event ID ****************
             event_by_id: UnorderedMap::new(StorageKeys::EventInfoPerID),
             // **************** By Account ****************
@@ -137,7 +133,6 @@ impl Marketplace {
             )
             .unwrap(),
             global_freeze: false,
-            max_markup: 150, // 1.5x markup
             base_key_storage_size: base_key_storage_size.unwrap_or(684),
             // TODO: REFINE THIS
             max_metadata_bytes_per_key: max_metadata_bytes.unwrap_or(1000),

@@ -478,8 +478,7 @@ impl Marketplace {
                     Some(vec![seller_new_linkdrop_pk.clone()]),
                     U128(ticket_price),
                     Some(seller_linkdrop_drop_id.clone()),
-                )
-                .then(Self::ext(env::current_account_id())
+                );
             }
         }
     }

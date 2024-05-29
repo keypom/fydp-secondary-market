@@ -479,16 +479,8 @@ impl Marketplace {
                     U128(ticket_price),
                     Some(seller_linkdrop_drop_id.clone()),
                 )
-                .then(Self::ext(env::current_account_id()).create_linkdrop_callback());
+                .then(Self::ext(env::current_account_id())
             }
-        }
-    }
-
-    pub fn create_linkdrop_callback(&mut self) {
-        if let PromiseResult::Successful(_val) = env::promise_result(0) {
-            near_sdk::log!("Linkdrop created for seller");
-        } else {
-            near_sdk::log!("Linkdrop creation failed for seller");
         }
     }
 }

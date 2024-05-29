@@ -15,13 +15,13 @@ trait ExtKeypom {
 
     fn nft_token(&self, token_id: TokenId) -> Option<ExtNFTKey>;
 
-    // memo contains NftTrasnferMemo
-    fn nft_transfer(
+    fn nft_transfer_payout(
         &mut self,
         receiver_id: Option<AccountId>,
         approval_id: Option<u64>,
         memo: String,
-    );
+        balance: U128,
+    ) -> Payout;
 
     fn get_drop_information(&self, drop_id: DropId) -> ExtDrop;
 }

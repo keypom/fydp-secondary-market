@@ -15,6 +15,13 @@ pub type EventID = String;
 // v2 drop ID
 pub type DropIdJson = U128;
 
+//defines the payout type returned as a part of the royalty standards.
+#[derive(Serialize, Deserialize)]
+#[serde(crate = "near_sdk::serde")]
+pub struct Payout {
+    pub payout: HashMap<AccountId, U128>,
+}
+
 #[near_bindgen]
 #[derive(BorshDeserialize, BorshSerialize, Serialize, Deserialize, Clone, Debug)]
 pub struct ResaleInfo {

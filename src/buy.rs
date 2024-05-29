@@ -371,10 +371,11 @@ impl Marketplace {
         near_sdk::log!("Transferring {:?}", pk_string);
         // Get key's drop ID and then event, in order to modify all needed data
         ext_keypom::ext(AccountId::try_from(self.keypom_contract.to_string()).unwrap())
-            .nft_transfer(
+            .nft_transfer_payout(
                 new_owner.clone(),
                 approval_id,
                 serde_json::to_string(&memo).unwrap(),
+                U128::from(ticket_price),
             )
             .then(Self::ext(env::current_account_id()).buy_resale_callback(
                 buyer_id,
@@ -399,21 +400,72 @@ impl Marketplace {
         old_public_key: PublicKey,
         seller_new_linkdrop_pk: PublicKey,
         seller_linkdrop_drop_id: U128,
-    ) -> Promise {
-        if let PromiseResult::Successful(_val) = env::promise_result(0) {
-            // Transfer ticket price to seller and excess to buyer
-            let mut sale_binding = self.resales.get(&drop_id);
-            let sale = sale_binding.as_mut().unwrap();
-            sale.remove(&old_public_key);
-            self.resales.insert(&drop_id, &sale);
-            near_sdk::log!(
-                "Add Key Successful, transferring funds to funder and refunding excess to buyer"
-            );
-            let excess_payment = ticket_payment - ticket_price;
-            Promise::new(buyer_id).transfer(excess_payment);
+    ) {
+        // checking for payout information returned from the nft_transfer_payout method
+        let payout_option = promise_result_as_success().and_then(|value| {
+            // if we set the payout_option to None, that means something went wrong and we should refund the buyer
+            near_sdk::serde_json::from_slice::<Payout>(&value)
+                //converts the result to an optional value
+                .ok()
+                //returns None if the none. Otherwise executes the following logic
+                .and_then(|payout_object| {
+                    //we'll check if length of the payout object is > 10 or it's empty. In either case, we return None
+                    if payout_object.payout.len() > 10 || payout_object.payout.is_empty() {
+                        env::log_str("Cannot have more than 10 royalties");
+                        None
 
-            if seller_id != self.keypom_contract {
-                Promise::new(seller_id).transfer(ticket_price).as_return()
+                    //if the payout object is the correct length, we move forward
+                    } else {
+                        //we'll keep track of how much the nft contract wants us to payout. Starting at the full price payed by the buyer
+                        let mut remainder = ticket_price;
+
+                        //loop through the payout and subtract the values from the remainder.
+                        for &value in payout_object.payout.values() {
+                            //checked sub checks for overflow or any errors and returns None if there are problems
+                            remainder = remainder.checked_sub(value.0)?;
+                        }
+                        //Check to see if the NFT contract sent back a faulty payout that requires us to pay more or too little.
+                        //The remainder will be 0 if the payout summed to the total price. The remainder will be 1 if the royalties
+                        //we something like 3333 + 3333 + 3333.
+                        if remainder == 0 || remainder == 1 {
+                            //set the payout_option to be the payout because nothing went wrong
+                            Some(payout_object.payout)
+                        } else {
+                            //if the remainder was anything but 1 or 0, we return None
+                            None
+                        }
+                    }
+                })
+        });
+
+        // if the payout option was some payout, we set this payout variable equal to that some payout
+        let payout = if let Some(payout_option) = payout_option {
+            payout_option
+        //if the payout option was None, we refund the buyer for the price they payed and return
+        } else {
+            // Resale failed, transfer price and keypom deposit (everything) back to buyer
+            near_sdk::log!("Resale Purchase Failed due to NFT Transfer Failure, see Keypom Logs!");
+            near_sdk::log!("Refunding to buyer");
+            Promise::new(buyer_id).transfer(ticket_payment);
+            // leave function and return the price that was refunded
+            return;
+        };
+
+        // Transfer ticket price to seller and excess to buyer
+        let mut sale_binding = self.resales.get(&drop_id);
+        let sale = sale_binding.as_mut().unwrap();
+        sale.remove(&old_public_key);
+        self.resales.insert(&drop_id, &sale);
+        near_sdk::log!(
+            "Add Key Successful, transferring funds to funder and refunding excess to buyer"
+        );
+        let excess_payment = ticket_payment - ticket_price;
+        Promise::new(buyer_id).transfer(excess_payment);
+
+        // NEAR payouts
+        for (receiver_id, amount) in payout {
+            if receiver_id != self.keypom_contract {
+                Promise::new(receiver_id).transfer(amount.0);
             } else {
                 near_sdk::log!("Seller is Keypom, creating a linkdrop for seller");
                 // ticket price plus 0.05NEAR, estimated 0.03 NEAR
@@ -423,17 +475,12 @@ impl Marketplace {
                 )
                 .with_attached_deposit(create_drop_deposit)
                 .create_drop(
-                    Some(vec![seller_new_linkdrop_pk]),
+                    Some(vec![seller_new_linkdrop_pk.clone()]),
                     U128(ticket_price),
-                    Some(seller_linkdrop_drop_id),
+                    Some(seller_linkdrop_drop_id.clone()),
                 )
-                .then(Self::ext(env::current_account_id()).create_linkdrop_callback())
+                .then(Self::ext(env::current_account_id()).create_linkdrop_callback());
             }
-        } else {
-            // Resale failed, transfer price and keypom deposit (everything) back to buyer
-            near_sdk::log!("Resale Purchase Failed due to NFT Transfer Failure, see Keypom Logs!");
-            near_sdk::log!("Refunding to buyer");
-            Promise::new(buyer_id).transfer(ticket_payment).as_return()
         }
     }
 

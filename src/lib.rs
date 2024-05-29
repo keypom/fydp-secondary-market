@@ -36,7 +36,8 @@ use near_sdk::json_types::{Base64VecU8, U128};
 use near_sdk::serde::{Deserialize, Serialize};
 use near_sdk::PublicKey;
 use near_sdk::{
-    env, log, near_bindgen, require, AccountId, Balance, CryptoHash, Gas, Promise, PromiseResult,
+    env, log, near_bindgen, promise_result_as_success, require, AccountId, Balance, CryptoHash,
+    Gas, Promise, PromiseOrValue, PromiseResult,
 };
 use std::collections::{HashMap, HashSet};
 use std::convert::TryFrom;

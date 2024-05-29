@@ -51,7 +51,7 @@ pub struct EventDetails {
     // Event Status, can only be active or inactive
     pub status: Status,
     // Maximum resale price for secondary market.
-    pub max_markup: u64,
+    pub max_markup: u32,
     // Sale Information
     pub ticket_info: UnorderedMap<DropId, TicketInfo>,
     // Stripe status -> can this event accept stripe payments for primary sales?
@@ -68,7 +68,7 @@ pub struct ExtEventDetails {
     // Event Status, can only be active or inactive
     pub status: Status,
     // Maximum resale price for secondary market.
-    pub max_markup: u64,
+    pub max_markup: u32,
     // Sale Information
     pub ticket_info: HashMap<DropId, TicketInfo>,
     // Stripe status -> can this event accept stripe payments for primary sales?

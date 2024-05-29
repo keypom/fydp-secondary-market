@@ -14,6 +14,8 @@ impl Marketplace {
         event_id: EventID,
         // Host
         funder_id: AccountId,
+        // Price markup
+        max_markup: u32,
         // Event stripe status
         stripe_status: bool,
         // Host Strip ID
@@ -99,8 +101,13 @@ impl Marketplace {
             }
         }
 
-        let final_event_details =
-            self.create_event_details(event_id.clone(), funder_id.clone(), ticket_information, stripe_status);
+        let final_event_details = self.create_event_details(
+            event_id.clone(),
+            funder_id.clone(),
+            max_markup,
+            ticket_information,
+            stripe_status,
+        );
 
         // Insert by event ID stuff first
         self.event_by_id
@@ -155,8 +162,8 @@ impl Marketplace {
         // Ensure all drops are not already in event
         let event = self.event_by_id.get(&event_id).expect("No Event Found");
 
-         // Ensure all prices are greater than base cost per key
-         for ticket_info in ticket_information.values() {
+        // Ensure all prices are greater than base cost per key
+        for ticket_info in ticket_information.values() {
             // only check if not free
             if ticket_info.price.0 > u128::from(0 as u64) {
                 require!(
@@ -234,7 +241,10 @@ impl Marketplace {
         let price = received_resale_info.price;
         let key = received_resale_info.public_key;
 
-        require!((price.0 * 10) > 1, "Resale price cannot be lower than 0.1 NEAR");
+        require!(
+            (price.0 * 10) > 1,
+            "Resale price cannot be lower than 0.1 NEAR"
+        );
 
         // Require the key to be associated with an event
         let drop_id = self.drop_id_from_token_id(&token_id);
@@ -288,4 +298,3 @@ impl Marketplace {
         );
     }
 }
-

@@ -64,7 +64,8 @@ impl Marketplace {
         // get total key storage cost, to be paid by funder by taking it out of their payout
         let total_metadata_bytes = new_keys
             .iter()
-            .map(|x| x.metadata.clone().unwrap_or("".to_string()).len() as u64);
+            .map(|x| x.metadata.clone().unwrap_or("".to_string()).len() as u64)
+            .sum::<u64>();
         let total_key_storage_bytes =
             new_keys.len() as u64 * self.base_key_storage_size + total_metadata_bytes;
         // Total key costs to be decremented from funder payout

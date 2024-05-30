@@ -44,7 +44,7 @@ impl Marketplace {
             if ticket_info.price.0 > u128::from(0 as u64) {
                 near_sdk::log!("Evaluating: {}", ticket_info.price.0);
                 require!(
-                    ticket_info.price.0 >= (100_000_000_000_000_000_000_000),
+                    ticket_info.price.0 >= (500_000_000_000_000_000_000_000),
                     "Price for a drop is less than the cost of a key!"
                 );
             }
@@ -64,7 +64,8 @@ impl Marketplace {
             .map(|x| x.max_tickets.unwrap_or(0))
             .sum::<u64>();
         let base_total_key_bytes = (self.base_key_storage_size as u128
-            + self.max_metadata_bytes_per_key as u128)
+            + self.max_metadata_bytes_per_key as u128
+            + KEY_ALLOWANCE_COST)
             * total_free_tickets as u128;
         let base_total_key_cost = base_total_key_bytes * env::storage_byte_cost();
 

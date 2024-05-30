@@ -64,10 +64,10 @@ impl Marketplace {
             .map(|x| x.max_tickets.unwrap_or(0))
             .sum::<u64>();
         let base_total_key_bytes = (self.base_key_storage_size as u128
-            + self.max_metadata_bytes_per_key as u128
-            + KEY_ALLOWANCE_COST)
+            + self.max_metadata_bytes_per_key as u128)
             * total_free_tickets as u128;
-        let base_total_key_cost = base_total_key_bytes * env::storage_byte_cost();
+        let base_total_key_cost = base_total_key_bytes * env::storage_byte_cost()
+            + KEY_ALLOWANCE_COST * total_free_tickets as u128;
 
         near_sdk::log!(
             "User Balance + Attached Deposit: {}, Total Upfront Key Storage Cost: {}",
